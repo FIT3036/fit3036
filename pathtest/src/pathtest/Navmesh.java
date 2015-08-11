@@ -1,6 +1,16 @@
 package pathtest;
 
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Optional;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import pathtest.util.HashSet;
 import java.awt.geom.Point2D;
 import java.lang.IllegalArgumentException;
@@ -12,50 +22,105 @@ public class Navmesh {
 	public static final double NODE_SNAP_DIST = 1.0;
 	
 	
-	public class Node extends Point2D.Double {
+	public class Point extends Point2D.Double {
 		private static final long serialVersionUID = 1L;
 		
-		public Node(double x, double y) {
+		public Point(double x, double y) {
 			super(x,y);
 		}
 		
 	}
-	private class aStarCell implements Comparable<aStarCell>{
-		public aStarCell(Cell cell, Cell target){
-			this.cell = cell;
-			this.target = target;
-		}
-		
-		double knownCost;
-		Cell cell;
-		Cell target;
-		public double totalCost(){
-			return knownCost+costToTarget();
-		}
-		
-		public double costToTarget(){
-			return this.Cell.centre.distance(this.target.centre);
-		}
-		
-		public int compareTo(aStarCell other){
-			double diff = this.totalCost() - other.totalCost();
-			return (int) Math.signum(diff);
-		}
-	}
+	
 
-	public List<Cell> aStar(Cell start, Cell end){
-		PriorityQueue<aStarCell> cellstocheck = new PriorityQueue<aStarCell>();
-		LinkedList<aStarCell> knownPath = new LinkedList<aStarCell>;
+	public List<Cell> aStar(Cell start, Point target) {
+		
+		class aStarCell implements Comparable<aStarCell> {
+			
+			public double knownCost;
+			public final Cell cell;
+			public aStarCell parent;
+			
+			public aStarCell(Cell cell) {
+				this.cell = cell;
+			}
+			
+			public double totalCost() {
+				return knownCost+costToTarget();
+			}
+			
+			public double costToTarget() {
+				return this.cell.centre.distance(target);
+			}
+			
+			public double costTo(Cell other ) {
+				return this.cell.centre.distance(other.centre);
+			}
+			
+			public int compareTo(aStarCell other) {
+				double diff = this.totalCost() - other.totalCost();
+				return (int) Math.signum(diff);
+			}
+			
+			
+		}
+		
+		SortedSet<aStarCell> cellsToCheck = new TreeSet<aStarCell>();
+		LinkedList<aStarCell> knownPath = new LinkedList<aStarCell>();
+		
+		cellsToCheck.add(new aStarCell(start));
+		Cell targetCell = this.getCellContaining(target);
+		
+		while (cellsToCheck.first().cell != targetCell) {
+			aStarCell currentCell = cellsToCheck.first();
+			knownPath.addLast(currentCell);
+			for (Cell neighbour : currentCell.cell.neighbours()) {
+				double knownCostForNeighbour = currentCell.knownCost
+											   + currentCell.costTo(neighbour);
+				
+				boolean inCellsToCheck = false;
+				
+				Optional<aStarCell> alreadyChecking = cellsToCheck.stream().filter(c -> c.cell == neighbour).findAny();
+				if (alreadyChecking.isPresent()) {
+					inCellsToCheck = true;
+					if (alreadyChecking.get().knownCost > knownCostForNeighbour) {
+						inCellsToCheck = false;
+						cellsToCheck.remove(alreadyChecking.get());
+					}
+				}
+				
+				boolean inKnownPath = false;
+				
+				Optional<aStarCell> alreadyKnown = knownPath.stream().filter(c -> c.cell == neighbour).findAny();
+				if (alreadyKnown.isPresent()) {
+					inKnownPath = true;
+					if (alreadyChecking.get().knownCost > knownCostForNeighbour) {
+						inKnownPath = true;
+						knownPath.remove(alreadyKnown.get());
+					}
+				}
+				
+				if (! (inKnownPath || inCellsToCheck)) {
+					aStarCell neighbourToCheck = new aStarCell(neighbour);
+					neighbourToCheck.knownCost = knownCostForNeighbour;
+					neighbourToCheck.parent = currentCell;
+					cellsToCheck.add(neighbourToCheck);
+					
+				}
+			}
+		}
+		
+		Collections.reverse(knownPath);
+		return knownPath.stream().map(a -> a.cell).collect(Collectors.toList());
 	}
 	
 	//possible gotcha: my edges are undirectional, i.e. p1 -> p2 == p2 -> 1.
 	public class Edge {
-	    Node node1;
-	    Node node2;
+	    Point node1;
+	    Point node2;
 
 	    private Set<Cell> cells;
 	    
-	    public Edge(Node node1, Node node2) {
+	    public Edge(Point node1, Point node2) {
 	    	this.node1 = node1;
 	    	this.node2 = node2;
 	    }
@@ -76,7 +141,7 @@ public class Navmesh {
 	    	return ((this.firstNode().hashCode() >> 16) << 16) | (this.secondNode().hashCode() >> 16);
 	    }
 	    
-	    public Node firstNode() {
+	    public Point firstNode() {
 	    	if (node1.hashCode() <= node2.hashCode()) {
 	    		return node1;
 	    	} else {
@@ -84,7 +149,7 @@ public class Navmesh {
 	    	}
 	    }
 	    
-	    public Node secondNode() {
+	    public Point secondNode() {
 	    	if (node1.hashCode() <= node2.hashCode()) {
 	    		return node2;
 	    	} else {
@@ -100,10 +165,10 @@ public class Navmesh {
 	//TODO: deleting cells will require some cleanup
 	public class Cell {
 	    private final Edge[] edges;
-	    private final Node[] nodes;
+	    private final Point[] nodes;
 	    private final double[][] edgeEquations;
-	    public final Node centre;
-	    private Cell(Edge[] edges, Node[] nodes) {
+	    public final Point centre;
+	    private Cell(Edge[] edges, Point[] nodes) {
 	    	
 	    	this.edges = edges.clone();
 	    	this.nodes = nodes.clone();
@@ -112,10 +177,16 @@ public class Navmesh {
 	    		edge.cells.add(this);
 	    	}
 
+	    	Stream<Point> s = Arrays.stream(nodes);
+	    	centre = new Point(
+	    				s.mapToDouble(p->p.x).average().getAsDouble(),
+	    				s.mapToDouble(p->p.y).average().getAsDouble()
+    				 );					
+	    	
 	    	this.edgeEquations = new double[this.nodes.length][3];
 	    	for (int i = 0; i<this.nodes.length; i++) {
-	    		Node p1 = this.nodes[i];
-	    		Node p2 = this.nodes[(i+1) % this.nodes.length];
+	    		Point p1 = this.nodes[i];
+	    		Point p2 = this.nodes[(i+1) % this.nodes.length];
 	    		
 	    		// eqn for a line:
 	    		// | x  y  1 |
@@ -140,7 +211,7 @@ public class Navmesh {
 	    	}
 	    }
 	    
-	    public boolean contains(Node testNode) {
+	    public boolean contains(Point testNode) {
 	    	//go around all the nodes IN ORDER. We will build some algebraic level sets for the edges.
 	    	//maintaining node order means that these expressions will all evaluate positive/negative
 	    	//for points towards the centre/outside of the polygon in the same way.
@@ -172,29 +243,40 @@ public class Navmesh {
 	    	}
     		return true;
 	    }
+	    
+	    public Collection<Cell> neighbours() {
+	    	Collection<Cell> neighbours = new HashSet<Cell>();
+	    	for (Edge edge: this.edges) {
+	    		neighbours.addAll(edge.cells);
+	    	}
+	    	neighbours.remove(this);
+	    	return neighbours;
+	    }
 	}
 	
-	private HashSet<Node> nodes;
+	private HashSet<Point> nodes;
 	private HashSet<Edge> edges;
 	private HashSet<Cell> cells;
 	
 	protected void addCell(double... nodePoints) {
+		
 		if (nodePoints.length % 2 != 0) {
 			throw new IllegalArgumentException("addCell needs as list of coordinates x,y,x,y,etc. It was provided with a list of odd size,");
 		}
 		
-		Node[] cellNodes = new Node[nodePoints.length/2];
+		Point[] cellNodes = new Point[nodePoints.length/2];
 		
 		for (int i=0; i<nodePoints.length; i+=2) {
+			
 			double x = nodePoints[i];
 			double y = nodePoints[i+1];
 						
-			for (Node testNode : this.nodes) {
-				Node nodeToAdd;
+			for (Point testNode : this.nodes) {
+				Point nodeToAdd;
 				if (testNode.distanceSq(x,y)  < NODE_SNAP_DIST) {
 					nodeToAdd = testNode;
 				} else {
-					nodeToAdd = new Node(x,y);
+					nodeToAdd = new Point(x,y);
 					this.nodes.add(nodeToAdd);
 				}
 				cellNodes[i/2] = nodeToAdd;
@@ -210,10 +292,18 @@ public class Navmesh {
 		}
 		
 		Cell newCell = new Cell(cellEdges, cellNodes);
+		this.cells.add(newCell);
+	}
+	
+	public Cell getCellContaining(Point point) {
+		return this.cells.stream()
+						 .filter(c -> c.contains(point))
+						 .findAny()
+						 .get();
 	}
 	
 	public Navmesh() {
-		this.nodes = new HashSet<Node>();
+		this.nodes = new HashSet<Point>();
 		this.edges = new HashSet<Edge>();
 		this.cells = new HashSet<Cell>();
 	}
