@@ -20,6 +20,33 @@ public class Navmesh {
 		}
 		
 	}
+	private class aStarCell implements Comparable<aStarCell>{
+		public aStarCell(Cell cell, Cell target){
+			this.cell = cell;
+			this.target = target;
+		}
+		
+		double knownCost;
+		Cell cell;
+		Cell target;
+		public double totalCost(){
+			return knownCost+costToTarget();
+		}
+		
+		public double costToTarget(){
+			return this.Cell.centre.distance(this.target.centre);
+		}
+		
+		public int compareTo(aStarCell other){
+			double diff = this.totalCost() - other.totalCost();
+			return (int) Math.signum(diff);
+		}
+	}
+
+	public List<Cell> aStar(Cell start, Cell end){
+		PriorityQueue<aStarCell> cellstocheck = new PriorityQueue<aStarCell>();
+		LinkedList<aStarCell> knownPath = new LinkedList<aStarCell>;
+	}
 	
 	//possible gotcha: my edges are undirectional, i.e. p1 -> p2 == p2 -> 1.
 	public class Edge {
@@ -75,6 +102,7 @@ public class Navmesh {
 	    private final Edge[] edges;
 	    private final Node[] nodes;
 	    private final double[][] edgeEquations;
+	    public final Node centre;
 	    private Cell(Edge[] edges, Node[] nodes) {
 	    	
 	    	this.edges = edges.clone();
