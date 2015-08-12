@@ -19,7 +19,7 @@ import java.lang.IllegalArgumentException;
 
 public class Navmesh {
 
-	public static final double NODE_SNAP_DIST = 1.0;
+	public static final double NODE_SNAP_DIST = 0.5;
 	
 	
 	public class Point extends Point2D.Double {
@@ -85,6 +85,7 @@ public class Navmesh {
 					if (alreadyChecking.get().knownCost > knownCostForNeighbour) {
 						inCellsToCheck = false;
 						cellsToCheck.remove(alreadyChecking.get());
+						System.out.printf("found a better path to (%f, %f)\n", neighbour.centre.x, neighbour.centre.y);
 					}
 				}
 				
@@ -96,6 +97,7 @@ public class Navmesh {
 					if (alreadyChecking.get().knownCost > knownCostForNeighbour) {
 						inKnownPath = true;
 						knownPath.remove(alreadyKnown.get());
+						System.out.printf("removed an existing node, this should never happen\n");
 					}
 				}
 				
@@ -104,7 +106,7 @@ public class Navmesh {
 					neighbourToCheck.knownCost = knownCostForNeighbour;
 					neighbourToCheck.parent = currentCell;
 					cellsToCheck.add(neighbourToCheck);
-					
+					System.out.printf("added (%f, %f) to the path\n", neighbour.centre.x, neighbour.centre.y);
 				}
 			}
 		}
@@ -115,14 +117,19 @@ public class Navmesh {
 	
 	//possible gotcha: my edges are undirectional, i.e. p1 -> p2 == p2 -> 1.
 	public class Edge {
-	    Point node1;
-	    Point node2;
+	    final Point node1;
+	    final Point node2;
 
 	    private Set<Cell> cells;
 	    
 	    public Edge(Point node1, Point node2) {
 	    	this.node1 = node1;
 	    	this.node2 = node2;
+	    	this.cells = new HashSet<Cell>();
+	    }
+	    
+	    public void connectCell(Cell newCell) {
+	    	this.cells.add(newCell);
 	    }
 	    
 	    @Override
@@ -174,13 +181,12 @@ public class Navmesh {
 	    	this.nodes = nodes.clone();
 	    	for (Edge edge: edges) {
 	    		// we want to be able to easily ask "what cells does this edge touch?"
-	    		edge.cells.add(this);
+	    		edge.connectCell(this);
 	    	}
 
-	    	Stream<Point> s = Arrays.stream(nodes);
 	    	centre = new Point(
-	    				s.mapToDouble(p->p.x).average().getAsDouble(),
-	    				s.mapToDouble(p->p.y).average().getAsDouble()
+	    				Arrays.stream(nodes).mapToDouble(p->p.x).average().getAsDouble(),
+	    				Arrays.stream(nodes).mapToDouble(p->p.y).average().getAsDouble()
     				 );					
 	    	
 	    	this.edgeEquations = new double[this.nodes.length][3];
@@ -258,7 +264,7 @@ public class Navmesh {
 	private HashSet<Edge> edges;
 	private HashSet<Cell> cells;
 	
-	protected void addCell(double... nodePoints) {
+	protected Cell addCell(double... nodePoints) {
 		
 		if (nodePoints.length % 2 != 0) {
 			throw new IllegalArgumentException("addCell needs as list of coordinates x,y,x,y,etc. It was provided with a list of odd size,");
@@ -270,17 +276,19 @@ public class Navmesh {
 			
 			double x = nodePoints[i];
 			double y = nodePoints[i+1];
-						
+
+			Point nodeToAdd = null;
 			for (Point testNode : this.nodes) {
-				Point nodeToAdd;
 				if (testNode.distanceSq(x,y)  < NODE_SNAP_DIST) {
 					nodeToAdd = testNode;
-				} else {
-					nodeToAdd = new Point(x,y);
-					this.nodes.add(nodeToAdd);
+					break;
 				}
-				cellNodes[i/2] = nodeToAdd;
 			}
+			if (nodeToAdd == null) {
+				nodeToAdd = new Point(x, y);
+				this.nodes.add(nodeToAdd);
+			}
+			cellNodes[i/2] = nodeToAdd;
 			
 		}
 		
@@ -293,6 +301,7 @@ public class Navmesh {
 		
 		Cell newCell = new Cell(cellEdges, cellNodes);
 		this.cells.add(newCell);
+		return newCell;
 	}
 	
 	public Cell getCellContaining(Point point) {

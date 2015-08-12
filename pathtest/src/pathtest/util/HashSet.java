@@ -44,7 +44,7 @@ public class HashSet<T> implements Iterable<T>, java.util.Set<T> {
     }
    
     public boolean remove(Object o){
-        return (boolean) map.remove(o);
+        return (map.remove(o) != null);
     }
    
     public boolean contains(Object o){
