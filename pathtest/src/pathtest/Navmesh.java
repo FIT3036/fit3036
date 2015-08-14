@@ -64,15 +64,34 @@ public class Navmesh extends java.util.Observable {
 			
 		}
 		
-		SortedSet<aStarCell> cellsToCheck = new TreeSet<aStarCell>();
-		LinkedList<aStarCell> knownPath = new LinkedList<aStarCell>();
+
+		SortedSet<aStarCell> cellsToCheck = new TreeSet<aStarCell>();;
+		LinkedList<aStarCell> exploredPath;
+		
+		Runnable debugCheckList = new Runnable() {
+			@Override public void run() {
+				for (aStarCell cell: cellsToCheck) {
+					System.out.printf("  Cell (%f, %f): %.1f + %.1f = %.1f\n",
+							cell.cell.centre.x,
+							cell.cell.centre.y,
+							cell.knownCost,
+							cell.costToTarget(),
+							cell.totalCost());
+				}
+			}
+		};
+		
+		exploredPath = new LinkedList<aStarCell>();
 		
 		cellsToCheck.add(new aStarCell(start));
 		Cell targetCell = this.getCellContaining(target);
 		
 		while (cellsToCheck.first().cell != targetCell) {
+			debugCheckList.run();
 			aStarCell currentCell = cellsToCheck.first();
-			knownPath.addLast(currentCell);
+			cellsToCheck.remove(currentCell);
+			exploredPath.addLast(currentCell);
+			System.out.printf("added (%f, %f) to the path\n", currentCell.cell.centre.x, currentCell.cell.centre.y);
 			for (Cell neighbour : currentCell.cell.neighbours()) {
 				double knownCostForNeighbour = currentCell.knownCost
 											   + currentCell.costTo(neighbour);
@@ -82,6 +101,7 @@ public class Navmesh extends java.util.Observable {
 				Optional<aStarCell> alreadyChecking = cellsToCheck.stream().filter(c -> c.cell == neighbour).findAny();
 				if (alreadyChecking.isPresent()) {
 					inCellsToCheck = true;
+					System.out.printf("we are already checking (%f, %f)\n", neighbour.centre.x, neighbour.centre.y);
 					if (alreadyChecking.get().knownCost > knownCostForNeighbour) {
 						inCellsToCheck = false;
 						cellsToCheck.remove(alreadyChecking.get());
@@ -91,12 +111,13 @@ public class Navmesh extends java.util.Observable {
 				
 				boolean inKnownPath = false;
 				
-				Optional<aStarCell> alreadyKnown = knownPath.stream().filter(c -> c.cell == neighbour).findAny();
+				Optional<aStarCell> alreadyKnown = exploredPath.stream().filter(c -> c.cell == neighbour).findAny();
 				if (alreadyKnown.isPresent()) {
 					inKnownPath = true;
-					if (alreadyChecking.get().knownCost > knownCostForNeighbour) {
+					System.out.printf("we have already added (%f, %f)\n", neighbour.centre.x, neighbour.centre.y);
+					if (alreadyKnown.get().knownCost > knownCostForNeighbour) {
 						inKnownPath = true;
-						knownPath.remove(alreadyKnown.get());
+						exploredPath.remove(alreadyKnown.get());
 						System.out.printf("removed an existing node, this should never happen\n");
 					}
 				}
@@ -106,13 +127,18 @@ public class Navmesh extends java.util.Observable {
 					neighbourToCheck.knownCost = knownCostForNeighbour;
 					neighbourToCheck.parent = currentCell;
 					cellsToCheck.add(neighbourToCheck);
-					System.out.printf("added (%f, %f) to the path\n", neighbour.centre.x, neighbour.centre.y);
+					System.out.printf("added (%f, %f) to cells to check\n", neighbour.centre.x, neighbour.centre.y);
 				}
 			}
 		}
 		
-		Collections.reverse(knownPath);
-		return knownPath.stream().map(a -> a.cell).collect(Collectors.toList());
+		LinkedList<Cell> knownPath = new LinkedList<Cell>();
+		aStarCell knownCell = exploredPath.getLast();
+		do {
+			knownPath.addFirst(knownCell.cell);
+			knownCell = knownCell.parent;
+		} while (knownCell.cell!=start);
+		return knownPath;
 	}
 	
 	//possible gotcha: my edges are undirectional, i.e. p1 -> p2 == p2 -> 1.

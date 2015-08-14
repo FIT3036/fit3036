@@ -18,7 +18,7 @@ public class Main {
     	
     	for (int i=0; i<GRID_SIZE; i++) {
     		for (int j=0; j<GRID_SIZE; j++) {
-    			if (! ((i == 4) && (j > 4 || j < 6))) {
+    			if (! ((i == 4) && (j >= 4 && j <= 6))) {
     				cells[i][j] = n.addCell(i, j, i, j+1, i+1, j+1, i+1, j);
     			}
     		}
@@ -52,11 +52,11 @@ public class Main {
     	} else {
     		System.out.println("oh no");
     	}
-    	/*
+    	
     	List<Cell> path = n.aStar(n.getCellContaining(startP), endP);
     	
     	for (Cell cell : path) {
     		System.out.println(String.format("Going through (%s, %s)", cell.centre.x, cell.centre.y));
-    	}*/
+    	}
     }
 }
