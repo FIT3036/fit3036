@@ -17,7 +17,7 @@ import java.lang.IllegalArgumentException;
 
 
 
-public class Navmesh {
+public class Navmesh extends java.util.Observable {
 
 	public static final double NODE_SNAP_DIST = 0.5;
 	
@@ -172,13 +172,13 @@ public class Navmesh {
 	//TODO: deleting cells will require some cleanup
 	public class Cell {
 	    private final Edge[] edges;
-	    private final Point[] nodes;
+	    private final Point[] points;
 	    private final double[][] edgeEquations;
 	    public final Point centre;
 	    private Cell(Edge[] edges, Point[] nodes) {
 	    	
 	    	this.edges = edges.clone();
-	    	this.nodes = nodes.clone();
+	    	this.points = nodes.clone();
 	    	for (Edge edge: edges) {
 	    		// we want to be able to easily ask "what cells does this edge touch?"
 	    		edge.connectCell(this);
@@ -189,10 +189,10 @@ public class Navmesh {
 	    				Arrays.stream(nodes).mapToDouble(p->p.y).average().getAsDouble()
     				 );					
 	    	
-	    	this.edgeEquations = new double[this.nodes.length][3];
-	    	for (int i = 0; i<this.nodes.length; i++) {
-	    		Point p1 = this.nodes[i];
-	    		Point p2 = this.nodes[(i+1) % this.nodes.length];
+	    	this.edgeEquations = new double[this.points.length][3];
+	    	for (int i = 0; i<this.points.length; i++) {
+	    		Point p1 = this.points[i];
+	    		Point p2 = this.points[(i+1) % this.points.length];
 	    		
 	    		// eqn for a line:
 	    		// | x  y  1 |
@@ -225,7 +225,7 @@ public class Navmesh {
 	    	//are all of the same sign; if so, then our point is in the polygon.
 	    	
 	    	double testDirection = 0;
-	    	for (int i = 0; i < this.nodes.length; i++) {
+	    	for (int i = 0; i < this.points.length; i++) {
 	    		//evaluate ax+by+c
 	    		double testEvaluation =   edgeEquations[i][0]*testNode.x
 	    				                + edgeEquations[i][1]*testNode.y
@@ -257,6 +257,18 @@ public class Navmesh {
 	    	}
 	    	neighbours.remove(this);
 	    	return neighbours;
+	    }
+	    
+	    public double[] getXpoints() {
+	    	return Arrays.stream(this.points).mapToDouble(p -> p.x).toArray();
+	    }
+	    
+	    public double[] getYpoints() {
+	    	return Arrays.stream(this.points).mapToDouble(p -> p.y).toArray();
+	    }
+	    
+	    public int getPointsCount() {
+	    	return this.points.length;
 	    }
 	}
 	
@@ -301,6 +313,8 @@ public class Navmesh {
 		
 		Cell newCell = new Cell(cellEdges, cellNodes);
 		this.cells.add(newCell);
+		this.setChanged();
+		this.notifyObservers();
 		return newCell;
 	}
 	
@@ -311,10 +325,17 @@ public class Navmesh {
 						 .get();
 	}
 	
+	public Cell[] getCells() {
+		Cell[] cellsArray = new Cell[this.cells.size()];
+		this.cells.toArray(cellsArray);
+		return cellsArray;
+	}
+	
 	public Navmesh() {
 		this.nodes = new HashSet<Point>();
 		this.edges = new HashSet<Edge>();
 		this.cells = new HashSet<Cell>();
+		notifyObservers();
 	}
 
 	

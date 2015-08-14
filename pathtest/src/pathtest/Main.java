@@ -4,13 +4,15 @@ import java.util.List;
 import pathtest.Navmesh;
 import pathtest.Navmesh.Cell;
 import pathtest.Navmesh.Point;
-
+import pathtest.NavmeshView;
 public class Main {
 	
 	public final static int GRID_SIZE = 10;
 	
     public static void main(String[] args) {
+    	
     	Navmesh n = new Navmesh();
+    	NavmeshView nv = new NavmeshView(n);
     	
     	Cell[][] cells = new Cell[GRID_SIZE][GRID_SIZE];
     	
@@ -50,11 +52,11 @@ public class Main {
     	} else {
     		System.out.println("oh no");
     	}
-    	
+    	/*
     	List<Cell> path = n.aStar(n.getCellContaining(startP), endP);
     	
     	for (Cell cell : path) {
     		System.out.println(String.format("Going through (%s, %s)", cell.centre.x, cell.centre.y));
-    	}
+    	}*/
     }
 }
