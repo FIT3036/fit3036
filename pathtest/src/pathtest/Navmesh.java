@@ -3,17 +3,30 @@ package pathtest;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import pathtest.util.HashSet;
+
+import java.awt.Rectangle;
 import java.awt.geom.Point2D;
+import java.awt.geom.Rectangle2D;
+import java.io.BufferedReader;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.IOException;
 import java.lang.IllegalArgumentException;
+import java.lang.reflect.Array;
+import java.time.chrono.MinguoChronology;
 
 
 
@@ -49,11 +62,16 @@ public class Navmesh extends java.util.Observable {
 			}
 			
 			public double costToTarget() {
-				return this.cell.centre.distance(target);
+				return this.costTo(target);
 			}
 			
 			public double costTo(Cell other ) {
-				return this.cell.centre.distance(other.centre);
+				return this.costTo(other.centre);
+			}
+			
+			public double costTo(Point target) {
+				//return Math.abs(target.x - this.cell.centre.x) + Math.abs(target.y - this.cell.centre.y);
+				return this.cell.centre.distance(target);
 			}
 			
 			public int compareTo(aStarCell other) {
@@ -64,9 +82,18 @@ public class Navmesh extends java.util.Observable {
 			
 		}
 		
-
-		SortedSet<aStarCell> cellsToCheck = new TreeSet<aStarCell>();;
+		{
+			Map<String, Object> notification = new HashMap<String, Object>();
+			notification.put("startCell", start);
+			notification.put("endPoint", target);
+			setChanged();
+			notifyObservers(notification);
+		}
+		
+		PriorityQueue<aStarCell> cellsToCheck = new PriorityQueue<aStarCell>();
 		LinkedList<aStarCell> exploredPath;
+		LinkedList<Point[]> exploredPathDebug;
+		ReentrantLock explorationLock = new ReentrantLock();
 		
 		Runnable debugCheckList = new Runnable() {
 			@Override public void run() {
@@ -82,15 +109,35 @@ public class Navmesh extends java.util.Observable {
 		};
 		
 		exploredPath = new LinkedList<aStarCell>();
-		
+		exploredPathDebug = new LinkedList<Point[]>();
 		cellsToCheck.add(new aStarCell(start));
 		Cell targetCell = this.getCellContaining(target);
 		
-		while (cellsToCheck.first().cell != targetCell) {
+		while (cellsToCheck.peek().cell != targetCell) {
 			debugCheckList.run();
-			aStarCell currentCell = cellsToCheck.first();
-			cellsToCheck.remove(currentCell);
+			aStarCell currentCell = cellsToCheck.poll();
+			
 			exploredPath.addLast(currentCell);
+			
+			if (currentCell.parent != null) {
+				explorationLock.lock();
+				try {
+					exploredPathDebug.add(new Point[] {
+							currentCell.parent.cell.centre,
+							currentCell.cell.centre
+					});
+				} finally {
+					explorationLock.unlock();
+				}
+			}
+			
+			setChanged();
+			{
+				HashMap<String, Object> notification = new HashMap<String, Object>();
+				notification.put("exploredPath", exploredPathDebug);
+				notification.put("explorationLock", explorationLock);
+				notifyObservers(notification);
+			}
 			System.out.printf("added (%f, %f) to the path\n", currentCell.cell.centre.x, currentCell.cell.centre.y);
 			for (Cell neighbour : currentCell.cell.neighbours()) {
 				double knownCostForNeighbour = currentCell.knownCost
@@ -362,6 +409,38 @@ public class Navmesh extends java.util.Observable {
 		this.edges = new HashSet<Edge>();
 		this.cells = new HashSet<Cell>();
 		notifyObservers();
+	}
+	
+	public static Navmesh fromFile(String filename) throws IOException {
+		BufferedReader reader = new BufferedReader(new FileReader(filename));
+		String line;
+		Navmesh n = new Navmesh();
+		while ((line = reader.readLine()) != null) {
+			String[] nodeStrings = line.split(";");
+			double[] coords = new double[nodeStrings.length*2];
+			for (int i = 0; i<nodeStrings.length; i++) {
+				String[] splitCoord = nodeStrings[i].split(",");
+				coords[i*2] = Double.parseDouble(splitCoord[0]);
+				coords[i*2+1] = Double.parseDouble(splitCoord[1]);
+			}
+			n.addCell(coords);
+		};
+		reader.close();
+		return n;
+	}
+	
+	public Rectangle2D getBoundingBox() {
+		double bottom = Double.MAX_VALUE;
+		double top = Double.MIN_VALUE;
+		double left = Double.MAX_VALUE;
+		double right = Double.MIN_VALUE;
+		for (Point p : this.nodes) {
+			bottom = Math.min(p.y, bottom);
+			top = Math.max(p.y, top);
+			left = Math.min(p.x, left);
+			right = Math.max(p.x, right);
+		}
+		return new Rectangle2D.Double(left, top, right-left, top-bottom);
 	}
 
 	
