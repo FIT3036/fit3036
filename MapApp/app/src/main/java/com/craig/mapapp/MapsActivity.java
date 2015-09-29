@@ -1,5 +1,6 @@
 package com.craig.mapapp;
 
+import android.content.res.AssetManager;
 import android.location.Location;
 import android.os.Bundle;
 import android.support.v4.app.FragmentActivity;
@@ -26,6 +27,7 @@ import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.maps.android.ui.IconGenerator;
 import com.javapapers.android.androidlocationmaps.R;
 
+import java.io.IOException;
 import java.text.DateFormat;
 import java.util.Date;
 
@@ -44,6 +46,9 @@ public class MapsActivity extends FragmentActivity implements
     Location mCurrentLocation;
     String mLastUpdateTime;
     GoogleMap googleMap;
+    AssetManager assetManager;
+    Navmesh navmesh;
+    NavmeshViewer navmeshViewer;
 
     protected void createLocationRequest() {
         mLocationRequest = new LocationRequest();
@@ -72,6 +77,20 @@ public class MapsActivity extends FragmentActivity implements
                 .findFragmentById(R.id.map);
         googleMap = fm.getMap();
         googleMap.getUiSettings().setZoomControlsEnabled(true);
+
+        assetManager = this.getAssets();
+
+        try {
+            navmesh = Navmesh.fromFile(assetManager.open("campusCentreMap.txt"));
+            Log.d(TAG, "got campus centre map!");
+        } catch (IOException e) {
+            Log.d(TAG, "couldn't open campus centre map :(");
+            navmesh = new Navmesh();
+        }
+
+        navmeshViewer = new NavmeshViewer(googleMap, navmesh);
+        navmeshViewer.draw();
+
     }
 
     @Override
@@ -126,7 +145,7 @@ public class MapsActivity extends FragmentActivity implements
         Log.d(TAG, "Firing onLocationChanged..............................................");
         mCurrentLocation = location;
         mLastUpdateTime = DateFormat.getTimeInstance().format(new Date());
-        addMarker();
+        //addMarker();
     }
 
     private void addMarker() {

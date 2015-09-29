@@ -1,5 +1,9 @@
 package com.craig.mapapp;
 
+import java.io.BufferedReader;
+import java.io.FileDescriptor;
+import java.io.FileReader;
+import java.io.InputStreamReader;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
@@ -10,24 +14,28 @@ import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantLock;
 
-import java.io.BufferedReader;
-import java.io.FileReader;
+import java.io.InputStreamReader;
+import java.io.InputStream;
 import java.io.IOException;
 import java.lang.IllegalArgumentException;
 
 import android.graphics.PointF;
 import android.graphics.RectF;
 
+import com.google.android.gms.maps.model.LatLng;
+import com.google.maps.android.geometry.Bounds;
+import com.google.maps.android.geometry.Point;
+
 
 public class Navmesh extends java.util.Observable {
 
-	public static final double NODE_SNAP_DIST = 0.5;
+	public static final double NODE_SNAP_DIST = 0.00000000001; // we are in latitude and longitude!
 	
 	
-	public class Point extends PointF {
+	public class Point extends com.google.maps.android.geometry.Point {
 		private static final long serialVersionUID = 1L;
 		
-		public Point(float x, float y) {
+		public Point(double x, double y) {
 			super(x,y);
 		}
 
@@ -35,12 +43,20 @@ public class Navmesh extends java.util.Observable {
 			return new Point(this.x - otherPoint.x, this.y - otherPoint.y);
 		}
 
-		public float distance(Point otherPoint) {
+		public double length() {
+			return Math.sqrt(this.lengthSq());
+		}
+
+		public double distance(Point otherPoint) {
 			return otherPoint.subtract(this).length();
 		}
 
-		public float distanceSq(float x, float y) {
-			return (float) (Math.pow(this.x - x, 2) + Math.pow(this.y - y, 2));
+		public double lengthSq() {
+			return distanceSq(0,0);
+		}
+
+		public double distanceSq(double x, double y) {
+			return (Math.pow(this.x - x, 2) + Math.pow(this.y - y, 2));
 		}
 	}
 
@@ -268,8 +284,8 @@ public class Navmesh extends java.util.Observable {
 	    		edge.connectCell(this);
 	    	}
 
-			float centreX = 0;
-			float centreY = 0;
+			double centreX = 0;
+			double centreY = 0;
 
 			for (Point point: points) {
 				centreX += point.x * points.length;
@@ -363,6 +379,10 @@ public class Navmesh extends java.util.Observable {
 			}
 			return y;
 		}
+
+		public Point[] getPoints() {
+			return this.points;
+		}
 	    
 	    public int getPointsCount() {
 	    	return this.points.length;
@@ -373,7 +393,7 @@ public class Navmesh extends java.util.Observable {
 	private HashSet<Edge> edges;
 	private HashSet<Cell> cells;
 	
-	protected Cell addCell(float... nodePoints) {
+	protected Cell addCell(double... nodePoints) {
 		
 		if (nodePoints.length % 2 != 0) {
 			throw new IllegalArgumentException("addCell needs as list of coordinates x,y,x,y,etc. It was provided with a list of odd size,");
@@ -383,8 +403,8 @@ public class Navmesh extends java.util.Observable {
 		
 		for (int i=0; i<nodePoints.length; i+=2) {
 			
-			float x = nodePoints[i];
-			float y = nodePoints[i+1];
+			double x = nodePoints[i];
+			double y = nodePoints[i+1];
 
 			Point nodeToAdd = null;
 			for (Point testNode : this.nodes) {
@@ -437,17 +457,17 @@ public class Navmesh extends java.util.Observable {
 		notifyObservers();
 	}
 	
-	public static Navmesh fromFile(String filename) throws IOException {
-		BufferedReader reader = new BufferedReader(new FileReader(filename));
+	public static Navmesh fromFile(InputStream inputStream) throws IOException {
+		BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
 		String line;
 		Navmesh n = new Navmesh();
 		while ((line = reader.readLine()) != null) {
 			String[] nodeStrings = line.split(";");
-			float[] coords = new float[nodeStrings.length*2];
+			double[] coords = new double[nodeStrings.length*2];
 			for (int i = 0; i<nodeStrings.length; i++) {
 				String[] splitCoord = nodeStrings[i].split(",");
-				coords[i*2] = Float.parseFloat(splitCoord[0]);
-				coords[i*2+1] = Float.parseFloat(splitCoord[1]);
+				coords[i*2] = Double.parseDouble(splitCoord[0]);
+				coords[i*2+1] = Double.parseDouble(splitCoord[1]);
 			}
 			n.addCell(coords);
 		};
@@ -455,18 +475,18 @@ public class Navmesh extends java.util.Observable {
 		return n;
 	}
 	
-	public RectF getBoundingBox() {
-		float bottom = Float.MAX_VALUE;
-		float top = Float.MIN_VALUE;
-		float left = Float.MAX_VALUE;
-		float right = Float.MIN_VALUE;
+	public Bounds getBoundingBox() {
+		double bottom = Double.MAX_VALUE;
+		double top = Double.MIN_VALUE;
+		double left = Double.MAX_VALUE;
+		double right = Double.MIN_VALUE;
 		for (Point p : this.nodes) {
 			bottom = Math.min(p.y, bottom);
 			top = Math.max(p.y, top);
 			left = Math.min(p.x, left);
 			right = Math.max(p.x, right);
 		}
-		return new RectF(left, top, right, bottom);
+		return new Bounds(left, right, bottom, top);
 	}
 
 	
