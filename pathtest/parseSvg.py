@@ -1,79 +1,143 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 from xml.etree import ElementTree as ET
 
 class Vector:
-	def __init__(self, *args):
-		if len(args) == 1:
-			self.tuple = tuple(args[0])
-		else:
-			self.tuple = tuple(args)
+    def __init__(self, *args):
+        if len(args) == 1:
+            self.tuple = tuple(args[0])
+        else:
+            self.tuple = tuple(args)
 
-	def __add__(self, other):
-		if len(other) != len(self):
-			raise ValueError("other length != this length")
-		return Vector((sum(x) for x in zip(other, self)))
+    def __add__(self, other):
+        if len(other) != len(self):
+            raise ValueError("other length != this length")
+        return Vector((sum(x) for x in zip(other, self)))
 
-	def __len__(self):
-		return len(self.tuple)
+    def __len__(self):
+        return len(self.tuple)
 
-	def __iter__(self):
-		return iter(self.tuple)
+    def __iter__(self):
+        return iter(self.tuple)
 
-	def __repr__(self):
-		return repr(self.tuple)
+    def __repr__(self):
+        return repr(self.tuple)
 
-	def __str__(self):
-		return str(self.tuple)
+    def __str__(self):
+        return str(self.tuple)
 
-	def strNoBrackets(self):
-		return ','.join(map(str, self.tuple))
+    def strNoBrackets(self):
+        return ','.join(map(str, self.tuple))
 
-	def copy(self):
-		return Vector(tuple(self.tuple))
+    def copy(self):
+        return Vector(tuple(self.tuple))
+
+    @property
+    def x(self):
+        return self.tuple[0]
+
+    @x.setter
+    def x(self, newValue):
+        self.tuple = (newValue,)+self.tuple[1:]
+
+    @property
+    def y(self):
+        return self.tuple[1]
+
+    @y.setter
+    def y(self, newValue):
+        self.tuple = (self.tuple[0], newValue) + self.tuple[2:]
+
+    #hacky, for now only works when self is a 2vec and other is a numpy 3matrix
+    def __mul__(self, other):
+        result = (self.tuple + (1, ))*other
+        return Vector(result.tolist()[0])
 
 
-def getPaths(fileName):
-	tree = ET.parse(fileName)
-	root = tree.getroot()
-	inkscapeNamespace = {
-		'inkscape':"http://www.inkscape.org/namespaces/inkscape",
-		'svg': "http://www.w3.org/2000/svg"
-	}
 
-	pathLayer = root.find("svg:g[@inkscape:label='Trace']", inkscapeNamespace)
-	docHeight = float(root.get("height"));
-	rawPaths = pathLayer.findall("svg:path", inkscapeNamespace)
-	paths = []
 
-	for path in rawPaths:
-		nodesSplit = path.get("d").split(" ")
-		if nodesSplit[0] != "m":
-			raise Exception("path %s did not start with an m" % path.get("id"))
-		if nodesSplit[-1] != "z":
-			raise Exception("path %s was not closed properly" % path.get("id"))
-		nodesSplit = nodesSplit[1:-1]
-		currentAbsolutePosition = Vector(0,0)
-		nodes= []
-		for nodeString in nodesSplit:
-			node = tuple(map(float, nodeString.split(',')))
-			currentAbsolutePosition += node
-			node = currentAbsolutePosition.copy()
-			node.tuple = (node.tuple[0], docHeight - node.tuple[1]);
-			nodes.append(node)
+fileName = 'campusCentreTrace.svg'
 
-		paths.append(nodes)
+tree = ET.parse(fileName)
+root = tree.getroot()
+inkscapeNamespace = {
+    'inkscape': "http://www.inkscape.org/namespaces/inkscape",
+    'svg': "http://www.w3.org/2000/svg"
+}
 
-	return paths
+docHeight = float(root.get("height"))
+
+
+def calculateTransform():
+    import numpy as np
+    from scipy import linalg as spl
+
+    refLayer = root.find("svg:g[@inkscape:label='CoordRef']", inkscapeNamespace)
+    rawRefs = refLayer.findall("svg:circle", inkscapeNamespace)
+    localCoords = []
+    latLongCoords = []
+
+    # refs are a bunch of points that I've manually notated with a latitude
+    # and longitude. We can use these points to build a transform from svg
+    # coords to lat-long coords.
+    for ref in rawRefs:
+        x = float(ref.get("cx"))
+        y = float(ref.get("cy"))
+        lat = float(ref.get("x-lat"))
+        lon = float(ref.get("x-long"))
+
+        localCoords.append([x, y])
+        latLongCoords.append([lat, lon])
+
+    pointsLocal = np.matrix(localCoords)
+    pointsLatLong = np.matrix(latLongCoords)
+
+    # we need a matrix of the form
+    # x1 y1 1
+    # x2 y2 1
+    # ...
+    # to allow for a constant offset
+    onesColumn = np.ones((pointsLocal.shape[0], 1))
+    pointsLocal = np.concatenate((pointsLocal, onesColumn), axis=1)
+
+    # calculate pseudoinverse, this is the matrix
+    # such that (x,y,1)*pInv ~= (lat, long).
+    pInv = spl.pinv(pointsLocal)
+
+    return pInv * pointsLatLong
+
+
+def getPaths(transform=None):
+
+    pathLayer = root.find("svg:g[@inkscape:label='Trace']", inkscapeNamespace)
+    rawPaths = pathLayer.findall("svg:path", inkscapeNamespace)
+    paths = []
+
+    for path in rawPaths:
+        nodesSplit = path.get("d").split(" ")
+        if nodesSplit[0] != "m":
+            raise Exception("path %s did not start with an m" % path.get("id"))
+        if nodesSplit[-1] != "z":
+            raise Exception("path %s was not closed properly" % path.get("id"))
+        nodesSplit = nodesSplit[1:-1]
+        currentAbsolutePosition = Vector(0, 0)
+        nodes = []
+        for nodeString in nodesSplit:
+            node = tuple(map(float, nodeString.split(',')))
+            currentAbsolutePosition += node
+            nodeVector = currentAbsolutePosition.copy()
+            nodeVector.y = nodeVector.y
+            if transform is not None:
+                nodeVector = nodeVector*transform
+            nodes.append(nodeVector)
+
+        paths.append(nodes)
+
+    return paths
+
 
 def outputPaths(paths):
-	return '\n'.join((';'.join((node.strNoBrackets() for node in path)) for path in paths))
+    return '\n'.join((';'.join((node.strNoBrackets() for node in path))
+                      for path in paths))
 
-print(outputPaths(getPaths('campusCentreTrace.svg')))
-	
-#load svg
-#find all paths inside relevant group
-#for each path
-#get d, confirm is of the form "m blah blah z"
-#if so, add to paths
-#if not, crack shits
+print(outputPaths(getPaths(calculateTransform())))
