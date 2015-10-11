@@ -1,41 +1,3 @@
-/*package com.craig.speechtotext;
-
-import android.app.Activity;
-import android.os.Bundle;
-import android.view.Menu;
-import android.view.MenuItem;
-
-public class MainActivity extends Activity {
-
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
-    }
-
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        // Inflate the menu; this adds items to the action bar if it is present.
-        getMenuInflater().inflate(R.menu.menu_main, menu);
-        return true;
-    }
-
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        // Handle action bar item clicks here. The action bar will
-        // automatically handle clicks on the Home/Up button, so long
-        // as you specify a parent activity in AndroidManifest.xml.
-        int id = item.getItemId();
-
-        //noinspection SimplifiableIfStatement
-        if (id == R.id.action_settings) {
-            return true;
-        }
-
-        return super.onOptionsItemSelected(item);
-    }
-}
-*/
 package com.craig.speechtotext;
 
 import java.util.ArrayList;
@@ -48,14 +10,14 @@ import android.os.Bundle;
 import android.speech.RecognizerIntent;
 import android.view.Menu;
 import android.view.View;
-import android.view.View.OnTouchListener;
 import android.view.MotionEvent;
 import android.widget.ImageButton;
 import android.widget.ImageView;
+import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
-public class MainActivity extends Activity implements OnTouchListener {
+public class MainActivity extends Activity {
 
     private TextView txtSpeechInput;
     private ImageButton btnSpeak;
@@ -66,8 +28,8 @@ public class MainActivity extends Activity implements OnTouchListener {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        //txtSpeechInput = (TextView) findViewById(R.id.txtSpeechInput);
-        //btnSpeak = (ImageButton) findViewById(R.id.btnSpeak);
+        txtSpeechInput = (TextView) findViewById(R.id.txtSpeechInput);
+        btnSpeak = (ImageButton) findViewById(R.id.btnSpeak);
 
         // hide the action bar
         getActionBar().hide();
@@ -79,23 +41,25 @@ public class MainActivity extends Activity implements OnTouchListener {
                 promptSpeechInput();
             }
         });*/
-        ImageView view = (ImageView) findViewById(R.id.imageView);
-        view.setOnTouchListener(this);
-    }
-    @Override
-    public boolean onTouch(View v, MotionEvent event) {
-        if(event.getPointerCount()==2 && event.getActionIndex()==0) {
-            Toast.makeText(getApplicationContext(), "HEYYEYAAEYAAAEYAEYAA", Toast.LENGTH_SHORT).show();
-            Toast.makeText(getApplicationContext(), "I SAID HEY", Toast.LENGTH_SHORT).show();
-            Toast.makeText(getApplicationContext(), "WHAT'S GOING ON", Toast.LENGTH_SHORT).show();
-            //promptSpeechInput();
-        }
-        return true;
+
+        // create a new listener to detect two-finger taps
+        RelativeLayout view = (RelativeLayout) findViewById(R.id.mainlayout);
+        view.setOnTouchListener(new RelativeLayout.OnTouchListener(){
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                if(event.getPointerCount()==2) {
+                    Toast.makeText(getApplicationContext(),"tapped!",Toast.LENGTH_SHORT).show();
+                    Toast.makeText(getApplicationContext(),"end event...",Toast.LENGTH_SHORT).show();
+                    //promptSpeechInput();
+                }
+                return true;
+            }
+        });
     }
 
     /**
      * Showing google speech input dialog
-     */
+     * */
     private void promptSpeechInput() {
         Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
@@ -114,7 +78,7 @@ public class MainActivity extends Activity implements OnTouchListener {
 
     /**
      * Receiving speech input
-     */
+     * */
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
@@ -140,3 +104,4 @@ public class MainActivity extends Activity implements OnTouchListener {
         return true;
     }
 }
+ 
