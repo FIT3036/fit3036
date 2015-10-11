@@ -84,16 +84,12 @@ public class MainActivity extends Activity implements OnTouchListener {
     }
     @Override
     public boolean onTouch(View v, MotionEvent event) {
-        if(event.getPointerCount()==2) {
-            //Toast.makeText(getApplicationContext(), "HEYYEYAAEYAAAEYAEYAA", Toast.LENGTH_SHORT).show();
-            //Toast.makeText(getApplicationContext(), "I SAID HEY", Toast.LENGTH_SHORT).show();
-            //Toast.makeText(getApplicationContext(), "WHAT'S GOING ON", Toast.LENGTH_SHORT).show();
-            promptSpeechInput();
+        if(event.getPointerCount()==2 && event.getActionIndex()==0) {
+            Toast.makeText(getApplicationContext(), "HEYYEYAAEYAAAEYAEYAA", Toast.LENGTH_SHORT).show();
+            Toast.makeText(getApplicationContext(), "I SAID HEY", Toast.LENGTH_SHORT).show();
+            Toast.makeText(getApplicationContext(), "WHAT'S GOING ON", Toast.LENGTH_SHORT).show();
+            //promptSpeechInput();
         }
-       // else{
-        //    Toast.makeText(getApplicationContext(), "NOPE.AVI", Toast.LENGTH_SHORT).show();
-        //    return false;
-        //}
         return true;
     }
 
