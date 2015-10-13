@@ -465,9 +465,14 @@ public class Navmesh extends java.util.Observable {
 			String[] nodeStrings = line.split(";");
 			double[] coords = new double[nodeStrings.length*2];
 			for (int i = 0; i<nodeStrings.length; i++) {
-				String[] splitCoord = nodeStrings[i].split(",");
-				coords[i*2] = Double.parseDouble(splitCoord[0]);
-				coords[i*2+1] = Double.parseDouble(splitCoord[1]);
+				if (i == nodeStrings.length-1 && nodeStrings.length % 2 != 0) {
+					String[] names = nodeStrings[i].split(",");
+					System.out.println('found '+names[0]);
+				} else {
+					String[] splitCoord = nodeStrings[i].split(",");
+					coords[i*2] = Double.parseDouble(splitCoord[0]);
+					coords[i*2+1] = Double.parseDouble(splitCoord[1]);
+				}
 			}
 			n.addCell(coords);
 		};

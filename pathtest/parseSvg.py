@@ -130,14 +130,22 @@ def getPaths(transform=None):
             if transform is not None:
                 nodeVector = nodeVector*transform
             nodes.append(nodeVector)
+        friendlyName = None
+        friendlyNameAttr = path.get("x-name")
+        if len(friendlyNameAttr) > 0:
+            friendlyName = friendlyNameAttr
 
-        paths.append(nodes)
+        paths.append((nodes, friendlyName))
 
     return paths
 
 
 def outputPaths(paths):
-    return '\n'.join((';'.join((node.strNoBrackets() for node in path))
+    nodeString =  '\n'.join((';'.join((node.strNoBrackets() for node in path[0]))
                       for path in paths))
+    if path[1]:
+        return nodeString+';'+path[1]
+    else:
+        return nodeString
 
 print(outputPaths(getPaths(calculateTransform())))

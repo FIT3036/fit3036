@@ -38,6 +38,9 @@ public class Navmesh extends java.util.Observable {
 	public class Point extends Point2D.Double {
 		private static final long serialVersionUID = 1L;
 		
+		public double getLatitude() {return 0;}
+		public double getLongitude() {return 0;}
+		
 		public Point(double x, double y) {
 			super(x,y);
 		}
