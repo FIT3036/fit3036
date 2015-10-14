@@ -1,13 +1,15 @@
 package com.craig.mapapp;
 
+import android.content.Intent;
 import android.content.res.AssetManager;
 import android.location.Location;
 import android.os.Bundle;
 import android.support.v4.app.FragmentActivity;
 import android.util.Log;
-import android.util.Pair;
+import android.view.MotionEvent;
 import android.widget.Button;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GooglePlayServicesUtil;
@@ -33,7 +35,6 @@ import org.apache.commons.codec.EncoderException;
 
 import java.io.IOException;
 import java.text.DateFormat;
-import java.util.Collection;
 import java.util.Date;
 import java.util.Map;
 
@@ -55,6 +56,7 @@ public class MapsActivity extends FragmentActivity implements
     AssetManager assetManager;
     Navmesh navmesh;
     NavmeshViewer navmeshViewer;
+    MapAppSM stateMachine;
 
     protected void createLocationRequest() {
         mLocationRequest = new LocationRequest();
@@ -94,34 +96,67 @@ public class MapsActivity extends FragmentActivity implements
             navmesh = new Navmesh();
         }
 
+        stateMachine = new MapAppSM(this, navmesh);
+
         navmeshViewer = new NavmeshViewer(googleMap, navmesh);
         navmeshViewer.draw();
 
         String testSearch = "food";
-        try {
-            Multimap<Double, Navmesh.Cell> results = navmesh.getCellsMatchingString(testSearch);
-            for (Map.Entry<Double, Navmesh.Cell> result : results.entries()) {
-                System.err.println("found result: "+result.getKey()+" - "+result.getValue().getName());
-            }
-        } catch (EncoderException e) {
-            System.err.println("couldn't search!");
+        Multimap<Double, Navmesh.Cell> results = navmesh.getCellsMatchingString(testSearch);
+        for (Map.Entry<Double, Navmesh.Cell> result : results.entries()) {
+            System.err.println("found result: "+result.getKey()+" - "+result.getValue().getName());
         }
 
+
+
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        if (event.getPointerCount() == 2 && event.getActionMasked() == MotionEvent.ACTION_POINTER_DOWN) {
+            Toast.makeText(getApplicationContext(), "tapped! " + event.getAction(), Toast.LENGTH_SHORT).show();
+            Toast.makeText(getApplicationContext(), "end event...", Toast.LENGTH_SHORT).show();
+            stateMachine.onTwoFingerTap();
+            return false;
+        }
+        return super.dispatchTouchEvent(event);
+
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+
+        switch(requestCode) {
+            case AbstractVoiceSM.REQ_CODE_SPEECH_INPUT:
+                stateMachine.handleSpeech(resultCode, data);
+        }
     }
 
     @Override
     public void onStart() {
         super.onStart();
-        Log.d(TAG, "onStart fired ..............");
         mGoogleApiClient.connect();
     }
 
     @Override
     public void onStop() {
         super.onStop();
-        Log.d(TAG, "onStop fired ..............");
         mGoogleApiClient.disconnect();
-        Log.d(TAG, "isConnected ...............: " + mGoogleApiClient.isConnected());
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        stopLocationUpdates();
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (mGoogleApiClient.isConnected()) {
+            startLocationUpdates();
+        }
     }
 
     private boolean isGooglePlayServicesAvailable() {
@@ -136,14 +171,12 @@ public class MapsActivity extends FragmentActivity implements
 
     @Override
     public void onConnected(Bundle bundle) {
-        Log.d(TAG, "onConnected - isConnected ...............: " + mGoogleApiClient.isConnected());
         startLocationUpdates();
     }
 
     protected void startLocationUpdates() {
-        PendingResult<Status> pendingResult = LocationServices.FusedLocationApi.requestLocationUpdates(
-                mGoogleApiClient, mLocationRequest, this);
-        Log.d(TAG, "Location update started ..............: ");
+        PendingResult<Status> pendingResult
+            = LocationServices.FusedLocationApi.requestLocationUpdates(mGoogleApiClient, mLocationRequest, this);
     }
 
     @Override
@@ -158,7 +191,6 @@ public class MapsActivity extends FragmentActivity implements
 
     @Override
     public void onLocationChanged(Location location) {
-        Log.d(TAG, "Firing onLocationChanged..............................................");
         mCurrentLocation = location;
         mLastUpdateTime = DateFormat.getTimeInstance().format(new Date());
 
@@ -199,11 +231,6 @@ public class MapsActivity extends FragmentActivity implements
                 13));
     }
 
-    @Override
-    protected void onPause() {
-        super.onPause();
-        stopLocationUpdates();
-    }
 
     protected void stopLocationUpdates() {
         if (mGoogleApiClient.isConnected()) {
@@ -213,12 +240,4 @@ public class MapsActivity extends FragmentActivity implements
         }
     }
 
-    @Override
-    public void onResume() {
-        super.onResume();
-        if (mGoogleApiClient.isConnected()) {
-            startLocationUpdates();
-            Log.d(TAG, "Location update resumed .....................");
-        }
-    }
 }

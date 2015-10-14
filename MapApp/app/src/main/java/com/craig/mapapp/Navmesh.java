@@ -27,6 +27,7 @@ import java.lang.IllegalArgumentException;
 
 import android.graphics.PointF;
 import android.graphics.RectF;
+import android.util.Log;
 import android.util.Pair;
 
 import com.google.android.gms.maps.model.LatLng;
@@ -514,20 +515,25 @@ public class Navmesh extends java.util.Observable {
 		notifyObservers();
 	}
 
-	public Multimap<Double,Cell> getCellsMatchingString(String searchString) throws EncoderException {
+	public Multimap<Double,Cell> getCellsMatchingString(String searchString) {
 		TreeMultimap<Double, Cell> results = TreeMultimap.create(Ordering.natural(), Ordering.arbitrary());
-		String encodedSearchString = phoneticEncoder.encode(searchString);
-		for (Map.Entry<String, Cell> keyEntry: this.placeDictionary.entries()) { // this returns a list of keyval pairs; keys are not collapsed: [{food -> Meetingpoint}, {food -> artichoke and whitebait}], etc.
-			String encodedName = keyEntry.getKey();
-			Cell cell = keyEntry.getValue();
-			int score = StringUtils.getLevenshteinDistance(encodedSearchString, encodedName, 4);
-			if (score > -1) {
-				double normalizedScore = score / (double) Math.max(encodedSearchString.length(), encodedName.length());
-				System.out.println(String.format("results found %s. encodedName: %s. searchString: %s.", cell.getName(), encodedName, encodedSearchString));
-				results.put(normalizedScore, cell);
+		try {
+			String encodedSearchString = phoneticEncoder.encode(searchString);
+			for (Map.Entry<String, Cell> keyEntry: this.placeDictionary.entries()) { // this returns a list of keyval pairs; keys are not collapsed: [{food -> Meetingpoint}, {food -> artichoke and whitebait}], etc.
+				String encodedName = keyEntry.getKey();
+				Cell cell = keyEntry.getValue();
+				int score = StringUtils.getLevenshteinDistance(encodedSearchString, encodedName, 4);
+				if (score > -1) {
+					double normalizedScore = score / (double) Math.max(encodedSearchString.length(), encodedName.length());
+					System.out.println(String.format("results found %s. encodedName: %s. searchString: %s.", cell.getName(), encodedName, encodedSearchString));
+					results.put(normalizedScore, cell);
+				}
 			}
+			return results;
+		} catch (EncoderException e) {
+			Log.d("ASDF", "Couldn't encode the search string!");
+			return results;
 		}
-		return results;
 	}
 	
 	public static Navmesh fromFile(InputStream inputStream) throws IOException {

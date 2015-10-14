@@ -2,7 +2,8 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context=".TaskRoadMap" >
+    tools:context=".TaskRoadMap"
+    android:id="@+id/rlayout">
 
     <fragment
         android:id="@+id/map"
