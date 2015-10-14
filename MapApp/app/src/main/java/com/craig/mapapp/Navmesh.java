@@ -6,12 +6,18 @@ import java.io.FileReader;
 import java.io.InputStreamReader;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Set;
+import java.util.SortedMap;
+import java.util.SortedSet;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.concurrent.locks.ReentrantLock;
 
 import java.io.InputStreamReader;
@@ -21,11 +27,24 @@ import java.lang.IllegalArgumentException;
 
 import android.graphics.PointF;
 import android.graphics.RectF;
+import android.util.Pair;
 
 import com.google.android.gms.maps.model.LatLng;
+import com.google.common.collect.Multiset;
+import com.google.common.collect.Ordering;
+import com.google.common.collect.TreeMultimap;
+import com.google.common.collect.TreeMultiset;
 import com.google.maps.android.geometry.Bounds;
 import com.google.maps.android.geometry.Point;
+import com.google.common.collect.Multimap;
+import com.google.common.collect.HashMultimap;
 
+import org.apache.commons.codec.EncoderException;
+import org.apache.commons.codec.StringEncoder;
+import org.apache.commons.codec.language.Caverphone2;
+import org.apache.commons.codec.language.Soundex;
+
+import org.apache.commons.lang3.StringUtils;
 
 public class Navmesh extends java.util.Observable {
 
@@ -275,6 +294,9 @@ public class Navmesh extends java.util.Observable {
 	    private final Point[] points;
 	    private final double[][] edgeEquations;
 	    public final Point centre;
+
+		private String[] names;
+
 	    private Cell(Edge[] edges, Point[] points) {
 	    	
 	    	this.edges = edges.clone();
@@ -380,6 +402,18 @@ public class Navmesh extends java.util.Observable {
 			return y;
 		}
 
+		public String[] getNames() {
+			return this.names;
+		}
+
+		public String getName() {
+			return this.names[0];
+		}
+
+		public void setNames(String[] names) {
+			this.names = names;
+		}
+
 		public Point[] getPoints() {
 			return this.points;
 		}
@@ -392,23 +426,44 @@ public class Navmesh extends java.util.Observable {
 	private HashSet<Point> nodes;
 	private HashSet<Edge> edges;
 	private HashSet<Cell> cells;
+	private Multimap<String, Cell> placeDictionary;
+
+	private StringEncoder phoneticEncoder;
+
+	protected Cell addCell(String[] names, double... nodePoints) {
+		Cell newCell = this.addCell(nodePoints);
+		newCell.setNames(names);
+
+		for (String name: names) {
+			try {
+				String encodedName = phoneticEncoder.encode(name);
+				this.placeDictionary.put(encodedName, newCell);
+			} catch (EncoderException e) {
+				System.err.println("error encoding "+name);
+				continue;
+			}
+		}
+
+		return newCell;
+
+	}
 	
 	protected Cell addCell(double... nodePoints) {
-		
+
 		if (nodePoints.length % 2 != 0) {
 			throw new IllegalArgumentException("addCell needs as list of coordinates x,y,x,y,etc. It was provided with a list of odd size,");
 		}
-		
-		Point[] cellNodes = new Point[nodePoints.length/2];
-		
-		for (int i=0; i<nodePoints.length; i+=2) {
-			
+
+		Point[] cellNodes = new Point[nodePoints.length / 2];
+
+		for (int i = 0; i < nodePoints.length; i += 2) {
+
 			double x = nodePoints[i];
-			double y = nodePoints[i+1];
+			double y = nodePoints[i + 1];
 
 			Point nodeToAdd = null;
 			for (Point testNode : this.nodes) {
-				if (testNode.distanceSq(x,y)  < NODE_SNAP_DIST) {
+				if (testNode.distanceSq(x, y) < NODE_SNAP_DIST) {
 					nodeToAdd = testNode;
 					break;
 				}
@@ -417,17 +472,17 @@ public class Navmesh extends java.util.Observable {
 				nodeToAdd = new Point(x, y);
 				this.nodes.add(nodeToAdd);
 			}
-			cellNodes[i/2] = nodeToAdd;
-			
+			cellNodes[i / 2] = nodeToAdd;
+
 		}
-		
+
 		Edge[] cellEdges = new Edge[cellNodes.length];
-		
-		for (int i = 0; i< cellNodes.length; i++) {
-			Edge newEdge = new Edge(cellNodes[i], cellNodes[(i+1) % cellNodes.length]);
+
+		for (int i = 0; i < cellNodes.length; i++) {
+			Edge newEdge = new Edge(cellNodes[i], cellNodes[(i + 1) % cellNodes.length]);
 			cellEdges[i] = this.edges.getOrAdd(newEdge);
 		}
-		
+
 		Cell newCell = new Cell(cellEdges, cellNodes);
 		this.cells.add(newCell);
 		this.setChanged();
@@ -454,7 +509,25 @@ public class Navmesh extends java.util.Observable {
 		this.nodes = new HashSet<Point>();
 		this.edges = new HashSet<Edge>();
 		this.cells = new HashSet<Cell>();
+		this.placeDictionary = HashMultimap.create(20,5);
+		this.phoneticEncoder = new Caverphone2();
 		notifyObservers();
+	}
+
+	public Multimap<Double,Cell> getCellsMatchingString(String searchString) throws EncoderException {
+		TreeMultimap<Double, Cell> results = TreeMultimap.create(Ordering.natural(), Ordering.arbitrary());
+		String encodedSearchString = phoneticEncoder.encode(searchString);
+		for (Map.Entry<String, Cell> keyEntry: this.placeDictionary.entries()) { // this returns a list of keyval pairs; keys are not collapsed: [{food -> Meetingpoint}, {food -> artichoke and whitebait}], etc.
+			String encodedName = keyEntry.getKey();
+			Cell cell = keyEntry.getValue();
+			int score = StringUtils.getLevenshteinDistance(encodedSearchString, encodedName, 4);
+			if (score > -1) {
+				double normalizedScore = score / (double) Math.max(encodedSearchString.length(), encodedName.length());
+				System.out.println(String.format("results found %s. encodedName: %s. searchString: %s.", cell.getName(), encodedName, encodedSearchString));
+				results.put(normalizedScore, cell);
+			}
+		}
+		return results;
 	}
 	
 	public static Navmesh fromFile(InputStream inputStream) throws IOException {
@@ -462,20 +535,25 @@ public class Navmesh extends java.util.Observable {
 		String line;
 		Navmesh n = new Navmesh();
 		while ((line = reader.readLine()) != null) {
-			String[] nodeStrings = line.split(";");
+			String[] nodeData = line.split("~");
+			String[] nodeStrings = nodeData[0].split(";");
 			double[] coords = new double[nodeStrings.length*2];
 			for (int i = 0; i<nodeStrings.length; i++) {
-				if (i == nodeStrings.length-1 && nodeStrings.length % 2 != 0) {
-					String[] names = nodeStrings[i].split(",");
-					System.out.println('found '+names[0]);
-				} else {
-					String[] splitCoord = nodeStrings[i].split(",");
-					coords[i*2] = Double.parseDouble(splitCoord[0]);
-					coords[i*2+1] = Double.parseDouble(splitCoord[1]);
-				}
+				String[] splitCoord = nodeStrings[i].split(",");
+				coords[i*2] = Double.parseDouble(splitCoord[0]);
+				coords[i*2+1] = Double.parseDouble(splitCoord[1]);
 			}
-			n.addCell(coords);
+			if (nodeData.length == 2) {
+				String[] names = nodeData[1].split(";");
+				Cell newCell = n.addCell(names, coords);
+				System.out.println("found " + newCell.getName());
+			} else {
+				n.addCell(coords);
+			}
 		};
+		for (Map.Entry<String, Cell> entry : n.placeDictionary.entries()) {
+			System.out.println(String.format("%s: %s", entry.getKey(), entry.getValue().getName()));
+		}
 		reader.close();
 		return n;
 	}

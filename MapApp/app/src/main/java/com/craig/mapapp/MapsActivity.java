@@ -5,6 +5,7 @@ import android.location.Location;
 import android.os.Bundle;
 import android.support.v4.app.FragmentActivity;
 import android.util.Log;
+import android.util.Pair;
 import android.widget.Button;
 import android.widget.TextView;
 
@@ -24,12 +25,17 @@ import com.google.android.gms.maps.model.GroundOverlayOptions;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.common.collect.Multimap;
 import com.google.maps.android.ui.IconGenerator;
 import com.javapapers.android.androidlocationmaps.R;
 
+import org.apache.commons.codec.EncoderException;
+
 import java.io.IOException;
 import java.text.DateFormat;
+import java.util.Collection;
 import java.util.Date;
+import java.util.Map;
 
 public class MapsActivity extends FragmentActivity implements
         LocationListener,
@@ -91,6 +97,16 @@ public class MapsActivity extends FragmentActivity implements
         navmeshViewer = new NavmeshViewer(googleMap, navmesh);
         navmeshViewer.draw();
 
+        String testSearch = "food";
+        try {
+            Multimap<Double, Navmesh.Cell> results = navmesh.getCellsMatchingString(testSearch);
+            for (Map.Entry<Double, Navmesh.Cell> result : results.entries()) {
+                System.err.println("found result: "+result.getKey()+" - "+result.getValue().getName());
+            }
+        } catch (EncoderException e) {
+            System.err.println("couldn't search!");
+        }
+
     }
 
     @Override
@@ -145,6 +161,9 @@ public class MapsActivity extends FragmentActivity implements
         Log.d(TAG, "Firing onLocationChanged..............................................");
         mCurrentLocation = location;
         mLastUpdateTime = DateFormat.getTimeInstance().format(new Date());
+
+        LatLng currentLatLng = new LatLng(mCurrentLocation.getLatitude(), mCurrentLocation.getLongitude());
+        googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(currentLatLng, 13));
         //addMarker();
     }
 
@@ -187,9 +206,11 @@ public class MapsActivity extends FragmentActivity implements
     }
 
     protected void stopLocationUpdates() {
-        LocationServices.FusedLocationApi.removeLocationUpdates(
-                mGoogleApiClient, this);
-        Log.d(TAG, "Location update stopped .......................");
+        if (mGoogleApiClient.isConnected()) {
+            LocationServices.FusedLocationApi.removeLocationUpdates(
+                    mGoogleApiClient, this);
+            Log.d(TAG, "Location update stopped .......................");
+        }
     }
 
     @Override

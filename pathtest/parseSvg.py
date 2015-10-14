@@ -117,7 +117,7 @@ def getPaths(transform=None):
         nodesSplit = path.get("d").split(" ")
         if nodesSplit[0] != "m":
             raise Exception("path %s did not start with an m" % path.get("id"))
-        if nodesSplit[-1] != "z":
+        if nodesSplit[-1] not in ["z", "Z"]:
             raise Exception("path %s was not closed properly" % path.get("id"))
         nodesSplit = nodesSplit[1:-1]
         currentAbsolutePosition = Vector(0, 0)
@@ -130,22 +130,21 @@ def getPaths(transform=None):
             if transform is not None:
                 nodeVector = nodeVector*transform
             nodes.append(nodeVector)
-        friendlyName = None
-        friendlyNameAttr = path.get("x-name")
-        if len(friendlyNameAttr) > 0:
-            friendlyName = friendlyNameAttr
+        names = None
+        namesAttr = path.get("x-names")
+        if namesAttr:
+            names = namesAttr
 
-        paths.append((nodes, friendlyName))
+        paths.append((nodes, names))
 
     return paths
 
 
 def outputPaths(paths):
-    nodeString =  '\n'.join((';'.join((node.strNoBrackets() for node in path[0]))
-                      for path in paths))
-    if path[1]:
-        return nodeString+';'+path[1]
-    else:
-        return nodeString
+    nodeString = '\n'.join(
+    				(';'.join((node.strNoBrackets() for node in path[0]))
+				   +('~'+path[1] if path[1] else '')
+                 for path in paths))
+    return nodeString
 
 print(outputPaths(getPaths(calculateTransform())))
