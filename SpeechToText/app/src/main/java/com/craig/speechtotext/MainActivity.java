@@ -8,6 +8,11 @@ import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.os.Bundle;
 import android.speech.RecognizerIntent;
+import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
+import android.view.GestureDetector;
+import android.view.GestureDetector.SimpleOnGestureListener;
+import android.view.GestureDetector;
 import android.view.Menu;
 import android.view.View;
 import android.view.MotionEvent;
@@ -21,8 +26,8 @@ public class MainActivity extends Activity {
 
     private TextView txtSpeechInput;
     private ImageButton btnSpeak;
+    private TextToSpeech tts;
     private final int REQ_CODE_SPEECH_INPUT = 100;
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -31,8 +36,33 @@ public class MainActivity extends Activity {
         txtSpeechInput = (TextView) findViewById(R.id.txtSpeechInput);
         btnSpeak = (ImageButton) findViewById(R.id.btnSpeak);
 
+        tts = new TextToSpeech(getBaseContext(), new TextToSpeech.OnInitListener() {
+            public void onInit(int status) {
+                return;
+            }
+        });
+        tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+            @Override
+            public void onStart(String s) {
+                return;
+            }
+
+            @Override
+            public void onDone(String s) {
+                if (s.equals("wherego")) {
+                    MainActivity.this.getSpeechInput();
+                }
+            }
+
+            @Override
+            public void onError(String s) {
+                return;
+            }
+        });
+
         // hide the action bar
         getActionBar().hide();
+
 
         /*btnSpeak.setOnClickListener(new View.OnClickListener() {
 
@@ -44,23 +74,29 @@ public class MainActivity extends Activity {
 
         // create a new listener to detect two-finger taps
         RelativeLayout view = (RelativeLayout) findViewById(R.id.mainlayout);
-        view.setOnTouchListener(new RelativeLayout.OnTouchListener(){
+        view.setOnTouchListener(new RelativeLayout.OnTouchListener() {
             @Override
             public boolean onTouch(View v, MotionEvent event) {
-                if(event.getPointerCount()==2) {
-                    Toast.makeText(getApplicationContext(),"tapped!",Toast.LENGTH_SHORT).show();
-                    Toast.makeText(getApplicationContext(),"end event...",Toast.LENGTH_SHORT).show();
-                    //promptSpeechInput();
+
+                if (event.getPointerCount() == 2 && event.getActionMasked() == MotionEvent.ACTION_POINTER_DOWN) {
+                    Toast.makeText(getApplicationContext(), "tapped! " + event.getAction(), Toast.LENGTH_SHORT).show();
+                    Toast.makeText(getApplicationContext(), "end event...", Toast.LENGTH_SHORT).show();
+                    MainActivity.this.promptSpeechInput();
                 }
                 return true;
             }
         });
     }
 
+
     /**
      * Showing google speech input dialog
      * */
     private void promptSpeechInput() {
+        tts.speak("Where do you want to go?", tts.QUEUE_FLUSH, null, "wherego");
+    }
+
+    private void getSpeechInput() {
         Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
                 RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
@@ -75,7 +111,6 @@ public class MainActivity extends Activity {
                     Toast.LENGTH_SHORT).show();
         }
     }
-
     /**
      * Receiving speech input
      * */
