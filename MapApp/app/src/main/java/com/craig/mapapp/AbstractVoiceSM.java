@@ -42,6 +42,8 @@ abstract public class AbstractVoiceSM {
     final static int REQ_CODE_SPEECH_INPUT = 100;
     protected Location lastKnownLocation;
     protected LocationListener locationListener;
+    protected RotationListener rotationListener;
+    protected float lastKnownRotation;
 
     public AbstractVoiceSM(Activity context) {
 
@@ -138,6 +140,13 @@ abstract public class AbstractVoiceSM {
         }
     }
 
+    public void onRotationChanged(float rotation) {
+        this.lastKnownRotation = rotation;
+        if (this.rotationListener != null) {
+            this.rotationListener.onRotationChanged(rotation);
+        }
+    }
+
     public void handleSpeech(int resultCode, Intent data) {
         if (resultCode == Activity.RESULT_OK && data != null) {
             Log.d(TAG, "got speech results!");
@@ -174,6 +183,9 @@ abstract public class AbstractVoiceSM {
 
         public SpeakThenAction(String prompt, String speakId) {
             super(prompt, speakId);
+        }
+        public SpeakThenAction(String speakId) {
+            super(null, speakId);
         }
 
         final public void doIt() {

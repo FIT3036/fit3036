@@ -7,6 +7,7 @@ import java.io.InputStreamReader;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -252,10 +253,10 @@ public class Navmesh extends java.util.Observable {
 
 	//returns the result of aStar as a list of points.
 	//TODO: something smarter than just taking all the edge midpoints.
-	public Queue<Point> aStarPoints(final Point startPoint, final Point target) {
+	public Deque<Point> aStarPoints(final Point startPoint, final Point target) {
 		Cell startCell = getCellContaining(startPoint);
 		List<Cell> cellPath = aStar(startCell, target);
-		Queue<Point> pointPath = new LinkedList<>();
+		Deque<Point> pointPath = new LinkedList<>();
 		PeekingIterator<Cell> cellI = Iterators.peekingIterator(cellPath.listIterator());
 		Cell cell = null;
 		while (cellI.hasNext()) {

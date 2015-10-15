@@ -16,6 +16,8 @@ import com.google.maps.android.SphericalUtil;
 import com.google.common.collect.Multimap;
 
 import java.util.ArrayList;
+import java.util.Deque;
+import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.PriorityQueue;
 import java.util.Queue;
@@ -40,9 +42,19 @@ public class MapAppSM extends AbstractVoiceSM {
         return new LatLng(location.getLatitude(), location.getLongitude());
     }
 
+    public static LatLng getLatLng(Navmesh.Point point) {
+        return new LatLng(point.x, point.y);
+    }
+
     public Navmesh.Point getPoint(Location location) {
         return navmesh.new Point(location.getLatitude(), location.getLongitude());
     }
+    public static double normalizeAngle(double angle) {
+        while (angle <= Math.PI) angle += 2*Math.PI;
+        while (angle > Math.PI) angle -= 2*Math.PI;
+        return angle;
+    }
+
 
     protected void configureStateMachine(StateMachineConfig<States, Triggers> smc) {
 
@@ -129,7 +141,7 @@ public class MapAppSM extends AbstractVoiceSM {
                         Navmesh.Point[] points = targetCell.getPoints();
                         Log.d(TAG, String.format("Cell points: %f,%f; %f,%f; %f,%f; %f,%f", points[0].x,points[0].y,points[1].x,points[1].y,points[2].x,points[2].y,points[3].x,points[3].y));
 
-                        Queue<Navmesh.Point> directionsList = navmesh.aStarPoints(startPoint, targetCell.centre);
+                        Deque<Navmesh.Point> directionsList = navmesh.aStarPoints(startPoint, targetCell.centre);
                         sm.fire(StartDirections, directionsList);
                     }
                 }, Navmesh.Cell.class)
@@ -137,30 +149,85 @@ public class MapAppSM extends AbstractVoiceSM {
                 .permit(BaseTriggers.DoubleTap, State.AskDestination);
 
         smc.configure(State.GivingDirections)
-                .onEntryFrom(StartDirections, new Action1<Queue>() {
+                .onEntryFrom(StartDirections, new Action1<Deque>() {
 
-                    @Override public void doIt(Queue directionsListUncast) {
-                        Queue<Navmesh.Point> directionsList = (Queue<Navmesh.Point>) directionsListUncast;
+                    @Override public void doIt(Deque directionsListUncast) {
+                        Deque<Navmesh.Point> directionsList = (Deque<Navmesh.Point>) directionsListUncast;
                         routeDirector = new RouteDirector(directionsList);
                         locationListener = routeDirector.locationListener;
                     }
 
-                }, Queue.class);
+                }, Deque.class)
+                .permit(Trigger.GiveDirectionTo, State.GivingNextDirection);
+
+        smc.configure(State.GivingNextDirection)
+                .substateOf(State.GivingDirections)
+                .onEntryFrom(Trigger.GiveDirectionTo, new SpeakThenAction("reachedPoint") {
+
+                    @Override public String generatePrompt() {
+                        return routeDirector.generateDirections();
+                    }
+
+                    @Override
+                    public void finishedSpeech() {
+                        routeDirector.markPointReached();
+                        sm.fire(Trigger.DirectionGiven);
+                    }
+                })
+                .permit(Trigger.DirectionGiven, State.GivingDirections);
 
     }
 
     private class RouteDirector {
-        private final Queue<Navmesh.Point> directionsList;
+        private final Deque<Navmesh.Point> directionsList;
         public final RouteLocationListener locationListener;
 
         private class RouteLocationListener implements com.google.android.gms.location.LocationListener {
             @Override
             public void onLocationChanged(Location location) {
-                /// TODO: check what state to change to
+                for (Navmesh.Point point :directionsList) {
+                    //get distance in metres;
+                    double distance = SphericalUtil.computeDistanceBetween(getLatLng(location), getLatLng(point));
+                    if (distance < 0.4) {
+                        while (directionsList.peek() != point)
+                            { directionsList.poll(); }
+                        //now the reached point is at the top of the queue
+                        Log.d(TAG, "you reached a point!");
+                    }
+                }
             }
         }
 
-        public RouteDirector(Queue<Navmesh.Point> directionsList) {
+        public void markPointReached() {
+            directionsList.poll();
+        }
+
+        public String generateDirections() {
+            Iterator<Navmesh.Point> pointI = directionsList.iterator();
+            Navmesh.Point currentPoint = pointI.next();
+            Navmesh.Point nextPoint = pointI.next();
+
+            Navmesh.Point diff = nextPoint.subtract(currentPoint);
+            double direction = Math.atan2(diff.y, diff.x);
+
+            double rotationDiff = direction - lastKnownRotation;
+            rotationDiff = normalizeAngle(rotationDiff);
+
+            double clockHour = (rotationDiff + Math.PI) / 2*Math.PI * 12;
+            int clockNumber = (int) Math.round(clockHour);
+
+            if (clockNumber == 0) {
+                clockNumber = 12;
+            }
+
+            double metres = com.google.maps.android.SphericalUtil.computeDistanceBetween(getLatLng(currentPoint), getLatLng(nextPoint));
+            int metresNum = (int) Math.round(metres / 5) * 5;
+
+            return String.format("Turn towards %i o'clock, and walk for about %i metres.", clockNumber, metresNum);
+
+        }
+
+        public RouteDirector(Deque<Navmesh.Point> directionsList) {
             this.directionsList = directionsList;
             this.locationListener = new RouteLocationListener();
             navmeshViewer.drawPath(directionsList);
@@ -171,22 +238,23 @@ public class MapAppSM extends AbstractVoiceSM {
 
 
     protected enum State implements States {
-        AskDestination, SearchDestinations, ConfirmDestination, ConfirmedDestination, GivingDirections
+        AskDestination, SearchDestinations, ConfirmDestination, ConfirmedDestination, GivingDirections, GivingNextDirection
     }
 
     protected enum Trigger implements Triggers {
-        GotPossibleDestinationsAbstract, GotDestinationAbstract, StartDirectionsAbstract
+        GotPossibleDestinationsAbstract, GotDestinationAbstract, StartDirectionsAbstract, GiveDirectionTo, DirectionGiven
     }
 
     private TriggerWithParameters1<Queue, States, Triggers> GotPossibleDestinations;
     private TriggerWithParameters1<Navmesh.Cell, States, Triggers> GotDestination;
-    private TriggerWithParameters1<Queue, States, Triggers> StartDirections;
+    private TriggerWithParameters1<Deque, States, Triggers> StartDirections;
+
 
     private void initializeParameterizedTriggers(StateMachineConfig<States, Triggers> smc) {
 
         GotPossibleDestinations = smc.setTriggerParameters(Trigger.GotPossibleDestinationsAbstract, Queue.class);
         GotDestination = smc.setTriggerParameters(Trigger.GotDestinationAbstract, Navmesh.Cell.class);
-        StartDirections = smc.setTriggerParameters(Trigger.StartDirectionsAbstract, Queue.class);
+        StartDirections = smc.setTriggerParameters(Trigger.StartDirectionsAbstract, Deque.class);
 
     }
 

@@ -41,6 +41,7 @@ import java.util.Queue;
 
 public class MapsActivity extends FragmentActivity implements
         LocationListener,
+        RotationListener,
         GoogleApiClient.ConnectionCallbacks,
         GoogleApiClient.OnConnectionFailedListener {
 
@@ -58,6 +59,7 @@ public class MapsActivity extends FragmentActivity implements
     Navmesh navmesh;
     NavmeshViewer navmeshViewer;
     MapAppSM stateMachine;
+    CompassListener compassListener;
 
     protected void createLocationRequest() {
         mLocationRequest = new LocationRequest();
@@ -97,6 +99,8 @@ public class MapsActivity extends FragmentActivity implements
             navmesh = new Navmesh();
         }
 
+        compassListener = new CompassListener(this);
+        compassListener.setRotationListener(this);
 
         navmeshViewer = new NavmeshViewer(googleMap, navmesh);
         navmeshViewer.draw();
@@ -163,12 +167,14 @@ public class MapsActivity extends FragmentActivity implements
     @Override
     protected void onPause() {
         super.onPause();
+        this.compassListener.stopListening();
         stopLocationUpdates();
     }
 
     @Override
     public void onResume() {
         super.onResume();
+        this.compassListener.startListening();
         if (mGoogleApiClient.isConnected()) {
             startLocationUpdates();
         }
@@ -213,6 +219,11 @@ public class MapsActivity extends FragmentActivity implements
         //googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(currentLatLng, 13));
         stateMachine.onLocationChanged(location);
         //addMarker();
+    }
+
+    @Override
+    public void onRotationChanged(float rotation) {
+        stateMachine.onRotationChanged(rotation);
     }
 
     private void addMarker() {
