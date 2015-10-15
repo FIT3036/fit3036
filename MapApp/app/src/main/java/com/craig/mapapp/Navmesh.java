@@ -8,10 +8,13 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.PriorityQueue;
 import java.util.Queue;
 import java.util.Set;
@@ -32,8 +35,10 @@ import android.util.Log;
 import android.util.Pair;
 
 import com.google.android.gms.maps.model.LatLng;
+import com.google.common.collect.Iterators;
 import com.google.common.collect.Multiset;
 import com.google.common.collect.Ordering;
+import com.google.common.collect.PeekingIterator;
 import com.google.common.collect.TreeMultimap;
 import com.google.common.collect.TreeMultiset;
 import com.google.maps.android.geometry.Bounds;
@@ -73,11 +78,19 @@ public class Navmesh extends java.util.Observable {
 		}
 
 		public double lengthSq() {
-			return distanceSq(0,0);
+			return distanceSq(0, 0);
 		}
 
 		public double distanceSq(double x, double y) {
 			return (Math.pow(this.x - x, 2) + Math.pow(this.y - y, 2));
+		}
+
+		public Point add(Point otherPoint) {
+			return new Point(this.x + otherPoint.x, this.y + otherPoint.y);
+		}
+
+		public Point divide(Double constant) {
+			return new Point(this.x / constant, this.y / constant);
 		}
 	}
 
@@ -162,7 +175,7 @@ public class Navmesh extends java.util.Observable {
 		Cell targetCell = this.getCellContaining(target);
 		
 		while (cellsToCheck.peek().cell != targetCell) {
-			debugCheckList.run();
+			//debugCheckList.run();
 			AStarCell currentCell = cellsToCheck.poll();
 			
 			exploredPath.addLast(currentCell);
@@ -234,6 +247,34 @@ public class Navmesh extends java.util.Observable {
 			knownCell = knownCell.parent;
 		} while (knownCell.cell!=start);
 		return knownPath;
+	}
+
+
+	//returns the result of aStar as a list of points.
+	//TODO: something smarter than just taking all the edge midpoints.
+	public Queue<Point> aStarPoints(final Point startPoint, final Point target) {
+		Cell startCell = getCellContaining(startPoint);
+		List<Cell> cellPath = aStar(startCell, target);
+		Queue<Point> pointPath = new LinkedList<>();
+		PeekingIterator<Cell> cellI = Iterators.peekingIterator(cellPath.listIterator());
+		Cell cell = null;
+		while (cellI.hasNext()) {
+			cell = cellI.next();
+			if (cell == startCell) {
+				pointPath.add(startPoint);
+			}
+			if (cellI.hasNext()) {
+				Cell nextCell = cellI.peek();
+				Edge nextEdge = cell.getEdgeForNeighbour(nextCell);
+				// get the midpoint of the edge
+				Point nextPoint = nextEdge.node1.add(nextEdge.node2).divide(2.0);
+				pointPath.add(nextPoint);
+			} else { // if there's no next, we are at the last cell
+				pointPath.add(target);
+			}
+
+		}
+		return pointPath;
 	}
 	
 	//possible gotcha: my edges are undirectional, i.e. p1 -> p2 == p2 -> 1.
@@ -312,8 +353,8 @@ public class Navmesh extends java.util.Observable {
 			double centreY = 0;
 
 			for (Point point: points) {
-				centreX += point.x * points.length;
-				centreY += point.y * points.length;
+				centreX += point.x / points.length;
+				centreY += point.y / points.length;
 			}
 
 	    	centre = new Point(centreX, centreY);
@@ -387,6 +428,15 @@ public class Navmesh extends java.util.Observable {
 	    	neighbours.remove(this);
 	    	return neighbours;
 	    }
+
+		public Edge getEdgeForNeighbour(Cell other) {
+			for (Edge edge: this.edges) {
+				if (edge.cells.contains(other)) {
+					return edge;
+				}
+			}
+			throw new NoSuchElementException();
+		}
 	    
 	    public double[] getXpoints() {
 			double[] x = new double[this.points.length];
@@ -493,13 +543,23 @@ public class Navmesh extends java.util.Observable {
 	}
 	
 	public Cell getCellContaining(Point point) {
+		double minDistance = Double.MAX_VALUE;
+		Cell closestCell = null;
 		for (Cell cell: this.cells) {
 			if (cell.contains(point)) {
 				return cell;
+			} else {
+				double distance = cell.centre.distance(point);
+				if (distance < minDistance) {
+					minDistance = distance;
+					closestCell = cell;
+				}
 			}
 		}
-		return null;
+		Log.d("ASDF", "Couldn't find that point!");
+		return closestCell;
 	}
+
 	
 	public Cell[] getCells() {
 		Cell[] cellsArray = new Cell[this.cells.size()];

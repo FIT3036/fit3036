@@ -97,18 +97,20 @@ public class MapsActivity extends FragmentActivity implements
             navmesh = new Navmesh();
         }
 
-        stateMachine = new MapAppSM(this, navmesh);
 
         navmeshViewer = new NavmeshViewer(googleMap, navmesh);
         navmeshViewer.draw();
 
+        stateMachine = new MapAppSM(this, navmesh, navmeshViewer);
+
         String testSearch = "food";
         Queue<Pair<Double, Navmesh.Cell>> results = navmesh.getCellsMatchingString(testSearch);
         for (Pair<Double, Navmesh.Cell> result : results) {
-            System.err.println("found result: "+result.first+" - "+result.second.getName());
+            System.err.println("found result: " + result.first + " - " + result.second.getName());
         }
 
-
+        //cc!
+        googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(-37.911825, 145.132955), 19));
 
     }
 
@@ -208,7 +210,8 @@ public class MapsActivity extends FragmentActivity implements
         mLastUpdateTime = DateFormat.getTimeInstance().format(new Date());
 
         LatLng currentLatLng = new LatLng(mCurrentLocation.getLatitude(), mCurrentLocation.getLongitude());
-        googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(currentLatLng, 13));
+        //googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(currentLatLng, 13));
+        stateMachine.onLocationChanged(location);
         //addMarker();
     }
 

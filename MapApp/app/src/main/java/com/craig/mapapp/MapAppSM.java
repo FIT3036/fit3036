@@ -1,6 +1,8 @@
 package com.craig.mapapp;
 
 import android.app.Activity;
+import android.location.Location;
+import android.location.LocationListener;
 import android.util.Log;
 import android.util.Pair;
 import android.widget.Toast;
@@ -9,9 +11,12 @@ import com.github.oxo42.stateless4j.StateMachineConfig;
 import com.github.oxo42.stateless4j.delegates.Action;
 import com.github.oxo42.stateless4j.delegates.Action1;
 import com.github.oxo42.stateless4j.triggers.TriggerWithParameters1;
+import com.google.android.gms.maps.model.LatLng;
+import com.google.maps.android.SphericalUtil;
 import com.google.common.collect.Multimap;
 
 import java.util.ArrayList;
+import java.util.NoSuchElementException;
 import java.util.PriorityQueue;
 import java.util.Queue;
 
@@ -22,16 +27,26 @@ import java.util.Queue;
 public class MapAppSM extends AbstractVoiceSM {
 
     private Navmesh navmesh;
+    private RouteDirector routeDirector;
+    private NavmeshViewer navmeshViewer;
 
-    public MapAppSM(Activity context, Navmesh navmesh) {
+    public MapAppSM(Activity context, Navmesh navmesh, NavmeshViewer navmeshViewer) {
         super(context);
         this.navmesh = navmesh;
+        this.navmeshViewer = navmeshViewer;
+    }
+
+    public static LatLng getLatLng(Location location) {
+        return new LatLng(location.getLatitude(), location.getLongitude());
+    }
+
+    public Navmesh.Point getPoint(Location location) {
+        return navmesh.new Point(location.getLatitude(), location.getLongitude());
     }
 
     protected void configureStateMachine(StateMachineConfig<States, Triggers> smc) {
 
-        GotPossibleDestinations = smc.setTriggerParameters(Trigger.GotPossibleDestinationsAbstract, Queue.class);
-        GotDestination = smc.setTriggerParameters(Trigger.GotDestinationAbstract, Navmesh.Cell.class);
+        initializeParameterizedTriggers(smc);
 
         smc.configure(BaseStates.Standby)
                 .onEntry(new SpeakThenAction(context.getString(R.string.sm_intro), "intro") {
@@ -95,27 +110,84 @@ public class MapAppSM extends AbstractVoiceSM {
                 .onEntryFrom(GotDestination, new SpeakThenAction1<Navmesh.Cell>("maybedest") {
 
                     @Override
-                    public String generatePrompt(Navmesh.Cell cell) {
-                        return "I'm sending you off to "+cell.getName()+", good luck!";
+                    public String generatePrompt(Navmesh.Cell targetCell) {
+                        return "I'm sending you off to " + targetCell.getName() + ", good luck!";
                     }
 
                     @Override
-                    public void doItAfterSpeech(Navmesh.Cell data) {
-                        return;
+                    public void doItAfterSpeech(Navmesh.Cell targetCell) {
+                        Navmesh.Point testPoint = getPoint(lastKnownLocation);
+                        Navmesh.Point startPoint;
+                        try {
+                            Navmesh.Cell testCell = navmesh.getCellContaining(testPoint);
+                            startPoint = testPoint;
+                        } catch (NoSuchElementException e) {
+                            startPoint = navmesh.new Point(-37.912198, 145.133097);
+                        }
+                        Log.d(TAG, targetCell.getName());
+                        Log.d(TAG, String.format("Centre: Lat: %f, Long: %f", targetCell.centre.x, targetCell.centre.y));
+                        Navmesh.Point[] points = targetCell.getPoints();
+                        Log.d(TAG, String.format("Cell points: %f,%f; %f,%f; %f,%f; %f,%f", points[0].x,points[0].y,points[1].x,points[1].y,points[2].x,points[2].y,points[3].x,points[3].y));
+
+                        Queue<Navmesh.Point> directionsList = navmesh.aStarPoints(startPoint, targetCell.centre);
+                        sm.fire(StartDirections, directionsList);
                     }
                 }, Navmesh.Cell.class)
-                .permit(BaseTriggers.DoubleTap, State.AskDestination);;
+                .permit(StartDirections.getTrigger(), State.GivingDirections)
+                .permit(BaseTriggers.DoubleTap, State.AskDestination);
+
+        smc.configure(State.GivingDirections)
+                .onEntryFrom(StartDirections, new Action1<Queue>() {
+
+                    @Override public void doIt(Queue directionsListUncast) {
+                        Queue<Navmesh.Point> directionsList = (Queue<Navmesh.Point>) directionsListUncast;
+                        routeDirector = new RouteDirector(directionsList);
+                        locationListener = routeDirector.locationListener;
+                    }
+
+                }, Queue.class);
 
     }
 
+    private class RouteDirector {
+        private final Queue<Navmesh.Point> directionsList;
+        public final RouteLocationListener locationListener;
+
+        private class RouteLocationListener implements com.google.android.gms.location.LocationListener {
+            @Override
+            public void onLocationChanged(Location location) {
+                /// TODO: check what state to change to
+            }
+        }
+
+        public RouteDirector(Queue<Navmesh.Point> directionsList) {
+            this.directionsList = directionsList;
+            this.locationListener = new RouteLocationListener();
+            navmeshViewer.drawPath(directionsList);
+        }
+
+
+    }
+
+
     protected enum State implements States {
-        AskDestination, SearchDestinations, ConfirmDestination, ConfirmedDestination, StartDirections
+        AskDestination, SearchDestinations, ConfirmDestination, ConfirmedDestination, GivingDirections
     }
 
     protected enum Trigger implements Triggers {
-        GotPossibleDestinationsAbstract, GotDestinationAbstract
+        GotPossibleDestinationsAbstract, GotDestinationAbstract, StartDirectionsAbstract
     }
+
     private TriggerWithParameters1<Queue, States, Triggers> GotPossibleDestinations;
     private TriggerWithParameters1<Navmesh.Cell, States, Triggers> GotDestination;
+    private TriggerWithParameters1<Queue, States, Triggers> StartDirections;
+
+    private void initializeParameterizedTriggers(StateMachineConfig<States, Triggers> smc) {
+
+        GotPossibleDestinations = smc.setTriggerParameters(Trigger.GotPossibleDestinationsAbstract, Queue.class);
+        GotDestination = smc.setTriggerParameters(Trigger.GotDestinationAbstract, Navmesh.Cell.class);
+        StartDirections = smc.setTriggerParameters(Trigger.StartDirectionsAbstract, Queue.class);
+
+    }
 
 }

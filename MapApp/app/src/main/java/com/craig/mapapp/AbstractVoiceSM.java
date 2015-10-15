@@ -3,6 +3,7 @@ package com.craig.mapapp;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.location.Location;
 import android.os.Bundle;
 import android.speech.RecognizerIntent;
 import android.speech.tts.TextToSpeech;
@@ -16,8 +17,10 @@ import com.github.oxo42.stateless4j.StateMachine;
 import com.github.oxo42.stateless4j.StateMachineConfig;
 import com.github.oxo42.stateless4j.delegates.Action;
 import com.github.oxo42.stateless4j.delegates.Action1;
+import com.github.oxo42.stateless4j.delegates.Action2;
 import com.github.oxo42.stateless4j.triggers.TriggerWithParameters;
 import com.github.oxo42.stateless4j.triggers.TriggerWithParameters1;
+import com.google.android.gms.location.LocationListener;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -37,6 +40,8 @@ abstract public class AbstractVoiceSM {
     final Activity context;
     final static String TAG = "AbstractVoiceSM";
     final static int REQ_CODE_SPEECH_INPUT = 100;
+    protected Location lastKnownLocation;
+    protected LocationListener locationListener;
 
     public AbstractVoiceSM(Activity context) {
 
@@ -71,17 +76,26 @@ abstract public class AbstractVoiceSM {
 
         smc = new StateMachineConfig<States, Triggers>();
 
-
         smc.configure(BaseStates.Preinit)
                 .permit(BaseTriggers.TTSReady, BaseStates.Standby);
 
 
-        GotSpeech = smc.setTriggerParameters(BaseTriggers.GotSpeechAbstract, ArrayList.class);
-        GotYesNo = smc.setTriggerParameters(BaseTriggers.GotYesNoAbstract, Boolean.class);
+        GotSpeech = smc.setTriggerParameters(AbstractTriggers.GotSpeechAbstract, ArrayList.class);
+        GotYesNo = smc.setTriggerParameters(AbstractTriggers.GotYesNoAbstract, Boolean.class);
+        GotLocation = smc.setTriggerParameters(AbstractTriggers.GotLocationAbstract, Location.class);
 
         configureStateMachine(smc);
 
         sm = new StateMachine<States, Triggers>(BaseStates.Preinit, smc);
+        /* // silence exceptions on unhandled states
+        sm.onUnhandledTrigger(new Action2<States, Triggers>() {
+            @Override
+            public void doIt(States s, Triggers t) {
+                Log.d(TAG, "unhandled trigger ignored");
+                return;
+            }
+        });
+        */
     }
 
     abstract void configureStateMachine(StateMachineConfig<States, Triggers> smc);
@@ -98,8 +112,18 @@ abstract public class AbstractVoiceSM {
     }
 
     protected enum BaseTriggers implements Triggers {
-        TTSReady, DoubleTap, GotSpeechAbstract, GotYesNoAbstract
+        TTSReady, DoubleTap
     }
+
+    //stateless requires triggers that take a parameter to go through some nasty boilerplate setup,
+    // let's keep them separate here.
+    protected enum AbstractTriggers implements Triggers {
+        GotSpeechAbstract, GotYesNoAbstract, GotLocationAbstract
+    }
+
+    protected TriggerWithParameters1<ArrayList, States, Triggers> GotSpeech;
+    protected TriggerWithParameters1<Boolean, States, Triggers> GotYesNo;
+    protected TriggerWithParameters1<Location, States, Triggers> GotLocation;
 
 
     public void onTwoFingerTap() {
@@ -107,9 +131,12 @@ abstract public class AbstractVoiceSM {
         sm.fire(BaseTriggers.DoubleTap);
     }
 
-    protected TriggerWithParameters1<ArrayList, States, Triggers> GotSpeech;
-
-    protected TriggerWithParameters1<Boolean, States, Triggers> GotYesNo;
+    public void onLocationChanged(Location location) {
+        this.lastKnownLocation = location;
+        if (this.locationListener != null) {
+            this.locationListener.onLocationChanged(location);
+        }
+    }
 
     public void handleSpeech(int resultCode, Intent data) {
         if (resultCode == Activity.RESULT_OK && data != null) {
