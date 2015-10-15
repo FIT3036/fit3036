@@ -2,4 +2,5 @@
     <string name="app_name">MapApp</string>
     <string name="title_activity_maps">Map</string>
     <string name="google_maps_key">AIzaSyAwO-pSyu9_-IfGuGzf8LoUxy_PZgsJuyk</string>
+    <string name="sm_intro">Welcome! I\'m going to ask you some questions to work out where you want to go. If I ever ask you a yes or no question, you can touch the top half of the screen for no, and the bottom half for yes. At any point, tap the screen with two fingers to begin your epic quest.</string>
 </resources>

@@ -8,6 +8,8 @@ import android.speech.RecognizerIntent;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
 import android.util.Log;
+import android.view.MotionEvent;
+import android.view.View;
 import android.widget.Toast;
 
 import com.github.oxo42.stateless4j.StateMachine;
@@ -30,7 +32,8 @@ abstract public class AbstractVoiceSM {
     private StateMachineConfig<States, Triggers> smc;
     TextToSpeech tts;
     Map<String, AbstractSpeakThenAction> waitingPrompts;
-    AskForResponse waitingForSpeech;
+    AbstractAskForResponse waitingForSpeech;
+    AbstractAskForYesNo waitingForYesNo;
     final Activity context;
     final static String TAG = "AbstractVoiceSM";
     final static int REQ_CODE_SPEECH_INPUT = 100;
@@ -74,6 +77,7 @@ abstract public class AbstractVoiceSM {
 
 
         GotSpeech = smc.setTriggerParameters(BaseTriggers.GotSpeechAbstract, ArrayList.class);
+        GotYesNo = smc.setTriggerParameters(BaseTriggers.GotYesNoAbstract, Boolean.class);
 
         configureStateMachine(smc);
 
@@ -94,10 +98,18 @@ abstract public class AbstractVoiceSM {
     }
 
     protected enum BaseTriggers implements Triggers {
-        TTSReady, GotSpeechAbstract
+        TTSReady, DoubleTap, GotSpeechAbstract, GotYesNoAbstract
     }
 
-    protected TriggerWithParameters1 GotSpeech;
+
+    public void onTwoFingerTap() {
+        Log.d(TAG, "firing doubletap");
+        sm.fire(BaseTriggers.DoubleTap);
+    }
+
+    protected TriggerWithParameters1<ArrayList, States, Triggers> GotSpeech;
+
+    protected TriggerWithParameters1<Boolean, States, Triggers> GotYesNo;
 
     public void handleSpeech(int resultCode, Intent data) {
         if (resultCode == Activity.RESULT_OK && data != null) {
@@ -114,8 +126,8 @@ abstract public class AbstractVoiceSM {
         String prompt;
         String speakId;
 
-        protected void speakPrompt() {
-            tts.speak(prompt, tts.QUEUE_FLUSH, Bundle.EMPTY, speakId);
+        protected void speakPrompt(String stringToSpeak) {
+            tts.speak(stringToSpeak, tts.QUEUE_FLUSH, Bundle.EMPTY, speakId);
             AbstractVoiceSM.this.waitingPrompts.put(this.speakId, this);
         }
 
@@ -125,6 +137,10 @@ abstract public class AbstractVoiceSM {
         }
 
         abstract public void finishedSpeech();
+
+        public String generatePrompt() {
+            return (this.prompt != null) ? this.prompt : "Default Prompt";
+        }
     }
 
     abstract protected class SpeakThenAction extends AbstractSpeakThenAction implements Action {
@@ -133,10 +149,10 @@ abstract public class AbstractVoiceSM {
             super(prompt, speakId);
         }
 
-
         final public void doIt() {
-            this.speakPrompt();
+            this.speakPrompt(this.generatePrompt());
         }
+
     }
     abstract protected class SpeakThenAction1<T> extends AbstractSpeakThenAction implements Action1<T> {
 
@@ -148,10 +164,7 @@ abstract public class AbstractVoiceSM {
         @Override
         final public void doIt(T data) {
             this.data = data;
-            if (this.prompt == null) {
-                this.prompt = this.generatePrompt(data);
-            }
-            this.speakPrompt();
+            this.speakPrompt(this.generatePrompt(data));
         }
 
         public SpeakThenAction1(String speakId) {
@@ -159,7 +172,7 @@ abstract public class AbstractVoiceSM {
         }
 
         public String generatePrompt(T data) {
-            return "Default String";
+            return this.generatePrompt();
         }
 
         final public void finishedSpeech() {
@@ -170,16 +183,11 @@ abstract public class AbstractVoiceSM {
     }
 
 
-    abstract protected class AskForResponse extends AbstractSpeakThenAction implements Action {
+    abstract private class AbstractAskForResponse extends AbstractSpeakThenAction {
 
-        AskForResponse(String prompt, String speakId) {
+        AbstractAskForResponse(String prompt, String speakId) {
             super(prompt, speakId);
         }
-
-        @Override public void doIt() {
-            this.speakPrompt();
-        }
-
 
         public void finishedSpeech() {
             waitingForSpeech = this;
@@ -201,11 +209,119 @@ abstract public class AbstractVoiceSM {
 
         abstract public void onSpeech(ArrayList<String> speech);
 
+    }
 
+    abstract protected class AskForResponse extends AbstractAskForResponse implements Action {
+        @Override public void doIt() {
+            this.speakPrompt(this.generatePrompt());
+        }
 
+        public AskForResponse(String prompt, String speakId) {
+            super(prompt, speakId);
+        }
+    }
 
+    abstract protected class AskForResponse1<T> extends AbstractAskForResponse implements Action1<T> {
+        private T data;
 
+        public AskForResponse1(String prompt, String speakId) {
+            super(prompt, speakId);
+        }
 
+        public AskForResponse1(String speakId) {
+            this(null, speakId);
+        }
+
+        public String generatePrompt(T data) {
+            return this.generatePrompt();
+        }
+
+        @Override public void doIt(T data) {
+            this.data = data;
+            this.speakPrompt(this.generatePrompt(data));
+        }
+
+        public void onSpeech(ArrayList<String> speech) {
+            this.onSpeechWithData(speech, this.data);
+        }
+
+        abstract public void onSpeechWithData(ArrayList<String> speech, T data);
+
+    }
+
+    abstract private class AbstractAskForYesNo extends AbstractSpeakThenAction {
+
+        public AbstractAskForYesNo(String prompt, String speakId) {
+            super(prompt, speakId);
+        }
+
+        public void finishedSpeech() {
+            waitingForYesNo = this;
+        }
+
+        abstract public void onYesNo(boolean response);
+
+    }
+
+    protected void askForYesNo(AbstractAskForYesNo askForYesNo) {
+        this.waitingForYesNo = askForYesNo;
+    }
+
+    protected boolean onTap(MotionEvent event, View capturingView) {
+        if (this.waitingForYesNo != null) {
+            float y = event.getY() / capturingView.getHeight();
+
+            if (y > 0.4 && y < 0.6) {
+                return false;
+            }
+
+            if (y <= 0.4) {
+                this.waitingForYesNo.onYesNo(false);
+            } else if (y >= 0.6) {
+                this.waitingForYesNo.onYesNo(true);
+            }
+            this.waitingForYesNo = null;
+            return true;
+        }
+        return false;
+    }
+
+    abstract protected class AskForYesNo extends AbstractAskForYesNo implements Action {
+        public AskForYesNo(String prompt, String speakId) {
+            super(prompt, speakId);
+        }
+
+        @Override final public void doIt() {
+            speakPrompt(this.generatePrompt());
+            askForYesNo(this);
+        }
+    }
+
+    abstract protected class AskForYesNo1<T> extends AbstractAskForYesNo implements Action1<T> {
+        private T data;
+
+        public AskForYesNo1(String prompt, String speakId) {
+            super(prompt, speakId);
+        }
+        public AskForYesNo1(String speakId) {
+            super(null, speakId);
+        }
+
+        @Override final public void doIt(T data) {
+            this.data = data;
+            speakPrompt(this.generatePrompt(data));
+            askForYesNo(this);
+        }
+
+        public String generatePrompt(T data) {
+            return "Default prompt";
+        }
+
+        @Override final public void onYesNo(boolean response) {
+            this.onYesNoWithData(response, this.data);
+        }
+
+        abstract public void onYesNoWithData(boolean response, T data);
 
     }
 

@@ -6,6 +6,7 @@ import android.location.Location;
 import android.os.Bundle;
 import android.support.v4.app.FragmentActivity;
 import android.util.Log;
+import android.util.Pair;
 import android.view.MotionEvent;
 import android.widget.Button;
 import android.widget.TextView;
@@ -29,7 +30,6 @@ import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.common.collect.Multimap;
 import com.google.maps.android.ui.IconGenerator;
-import com.javapapers.android.androidlocationmaps.R;
 
 import org.apache.commons.codec.EncoderException;
 
@@ -37,6 +37,7 @@ import java.io.IOException;
 import java.text.DateFormat;
 import java.util.Date;
 import java.util.Map;
+import java.util.Queue;
 
 public class MapsActivity extends FragmentActivity implements
         LocationListener,
@@ -102,22 +103,34 @@ public class MapsActivity extends FragmentActivity implements
         navmeshViewer.draw();
 
         String testSearch = "food";
-        Multimap<Double, Navmesh.Cell> results = navmesh.getCellsMatchingString(testSearch);
-        for (Map.Entry<Double, Navmesh.Cell> result : results.entries()) {
-            System.err.println("found result: "+result.getKey()+" - "+result.getValue().getName());
+        Queue<Pair<Double, Navmesh.Cell>> results = navmesh.getCellsMatchingString(testSearch);
+        for (Pair<Double, Navmesh.Cell> result : results) {
+            System.err.println("found result: "+result.first+" - "+result.second.getName());
         }
 
 
 
     }
 
+
+    private boolean consumingTwoFingerTap = false;
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
-        if (event.getPointerCount() == 2 && event.getActionMasked() == MotionEvent.ACTION_POINTER_DOWN) {
-            Toast.makeText(getApplicationContext(), "tapped! " + event.getAction(), Toast.LENGTH_SHORT).show();
-            Toast.makeText(getApplicationContext(), "end event...", Toast.LENGTH_SHORT).show();
+        if (event.getPointerCount() == 2 && event.getActionMasked() == MotionEvent.ACTION_POINTER_UP) {
+            consumingTwoFingerTap = true;
+            Toast.makeText(getApplicationContext(), "tapped x 2! " + event.getAction(), Toast.LENGTH_SHORT).show();
             stateMachine.onTwoFingerTap();
-            return false;
+            return true;
+        }
+        if (event.getPointerCount() == 1 && event.getActionMasked() == MotionEvent.ACTION_UP) {
+            if (consumingTwoFingerTap) {
+                consumingTwoFingerTap = false;
+                return false;
+            }
+            Toast.makeText(getApplicationContext(), "tapped! " + event.getAction(), Toast.LENGTH_SHORT).show();
+            if (stateMachine.onTap(event, findViewById(R.id.rlayout))) {
+                return true;
+            }
         }
         return super.dispatchTouchEvent(event);
 

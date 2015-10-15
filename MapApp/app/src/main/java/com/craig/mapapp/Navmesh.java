@@ -13,6 +13,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
+import java.util.Queue;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.SortedSet;
@@ -515,8 +516,13 @@ public class Navmesh extends java.util.Observable {
 		notifyObservers();
 	}
 
-	public Multimap<Double,Cell> getCellsMatchingString(String searchString) {
-		TreeMultimap<Double, Cell> results = TreeMultimap.create(Ordering.natural(), Ordering.arbitrary());
+	public Queue<Pair<Double,Cell>> getCellsMatchingString(String searchString) {
+		PriorityQueue<Pair<Double, Cell>> results = new PriorityQueue<Pair<Double, Cell>>(50, new Comparator<Pair<Double, Cell>>() {
+			@Override
+			public int compare(Pair<Double, Cell> t0, Pair<Double, Cell> t1) {
+				return Double.compare(t0.first, t1.first);
+			}
+		});
 		try {
 			String encodedSearchString = phoneticEncoder.encode(searchString);
 			for (Map.Entry<String, Cell> keyEntry: this.placeDictionary.entries()) { // this returns a list of keyval pairs; keys are not collapsed: [{food -> Meetingpoint}, {food -> artichoke and whitebait}], etc.
@@ -526,7 +532,7 @@ public class Navmesh extends java.util.Observable {
 				if (score > -1) {
 					double normalizedScore = score / (double) Math.max(encodedSearchString.length(), encodedName.length());
 					System.out.println(String.format("results found %s. encodedName: %s. searchString: %s.", cell.getName(), encodedName, encodedSearchString));
-					results.put(normalizedScore, cell);
+					results.add(new Pair(normalizedScore, cell));
 				}
 			}
 			return results;
