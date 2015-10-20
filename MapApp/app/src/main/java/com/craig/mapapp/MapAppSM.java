@@ -76,6 +76,7 @@ public class MapAppSM extends AbstractVoiceSM {
                         sm.fire(GotSpeech, results);
                     }
                 })
+                .ignore(BaseTriggers.DoubleTap)
                 .permit(GotSpeech.getTrigger(), State.SearchDestinations);
 
         smc.configure(State.SearchDestinations)

@@ -54,8 +54,12 @@ public class MapsActivity extends FragmentActivity implements
     GoogleApiClient mGoogleApiClient;
     Location mCurrentLocation;
     String mLastUpdateTime;
+
     GoogleMap googleMap;
+    Marker userMarker;
     AssetManager assetManager;
+
+
     Navmesh navmesh;
     NavmeshViewer navmeshViewer;
     MapAppSM stateMachine;
@@ -104,6 +108,8 @@ public class MapsActivity extends FragmentActivity implements
 
         navmeshViewer = new NavmeshViewer(googleMap, navmesh);
         navmeshViewer.draw();
+
+        addMarker();
 
         stateMachine = new MapAppSM(this, navmesh, navmeshViewer);
 
@@ -216,6 +222,8 @@ public class MapsActivity extends FragmentActivity implements
         mLastUpdateTime = DateFormat.getTimeInstance().format(new Date());
 
         LatLng currentLatLng = new LatLng(mCurrentLocation.getLatitude(), mCurrentLocation.getLongitude());
+        userMarker.setPosition(currentLatLng);
+
         //googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(currentLatLng, 13));
         stateMachine.onLocationChanged(location);
         //addMarker();
@@ -223,6 +231,11 @@ public class MapsActivity extends FragmentActivity implements
 
     @Override
     public void onRotationChanged(float rotation) {
+
+        Log.d(TAG, String.format("Got a location change! rotation is now %f", rotation));
+        float rotationDegrees = rotation / (float)Math.PI * 180;
+        userMarker.setRotation(rotationDegrees);
+
         stateMachine.onRotationChanged(rotation);
     }
 
@@ -233,22 +246,26 @@ public class MapsActivity extends FragmentActivity implements
         // https://developers.google.com/maps/documentation/android/utility/
         // I have used this to display the time as title for location markers
         // you can safely comment the following four lines but for this info
-        IconGenerator iconFactory = new IconGenerator(this);
-        iconFactory.setStyle(IconGenerator.STYLE_PURPLE);
-        options.icon(BitmapDescriptorFactory.fromBitmap(iconFactory.makeIcon(mLastUpdateTime)));
-        options.anchor(iconFactory.getAnchorU(), iconFactory.getAnchorV());
+        //IconGenerator iconFactory = new IconGenerator(this);
+        //iconFactory.setStyle(IconGenerator.STYLE_PURPLE);
+        //options.icon(BitmapDescriptorFactory.fromBitmap(iconFactory.makeIcon(mLastUpdateTime)));
+        //options.anchor(iconFactory.getAnchorU(), iconFactory.getAnchorV());
 
-        LatLng currentLatLng = new LatLng(mCurrentLocation.getLatitude(), mCurrentLocation.getLongitude());
+        LatLng currentLatLng;
+        if (mCurrentLocation != null) {
+            currentLatLng = new LatLng(mCurrentLocation.getLatitude(), mCurrentLocation.getLongitude());
+        } else {
+            currentLatLng= new LatLng(-37.911825, 145.132955);
+        }
+
         options.position(currentLatLng);
-        Marker mapMarker = googleMap.addMarker(options);
-        long atTime = mCurrentLocation.getTime();
-        mLastUpdateTime = DateFormat.getTimeInstance().format(new Date(atTime));
-        mapMarker.setTitle(mLastUpdateTime);
-        Log.d(TAG, "Marker added.............................");
-        googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(currentLatLng,
-                13));
-        Log.d(TAG, "Zoom done.............................");
+        options.flat(true);
+        options.draggable(false);
+        options.anchor(0.5f,0.5f);
 
+        userMarker = googleMap.addMarker(options);
+
+        /*
         //LatLng NEWARK = new LatLng(40.714086, -74.228697);
         GroundOverlayOptions newarkMap = new GroundOverlayOptions()
                 .image(BitmapDescriptorFactory.fromResource(R.drawable.heman))
@@ -256,6 +273,7 @@ public class MapsActivity extends FragmentActivity implements
         googleMap.addGroundOverlay(newarkMap);
         googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(currentLatLng,
                 13));
+        */
     }
 
 

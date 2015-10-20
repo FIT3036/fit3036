@@ -5,6 +5,7 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.util.Log;
 
 /**
  * Created by jarrad on 16/10/15.
@@ -14,7 +15,7 @@ public class CompassListener implements SensorEventListener {
     private Sensor magnetometer;
     private SensorManager sensorManager;
     private RotationListener rotationListener;
-
+    private static final String TAG = "CompasListener";
 
     public CompassListener(Context context) {
         sensorManager = (SensorManager) context.getSystemService(context.SENSOR_SERVICE);
@@ -36,17 +37,23 @@ public class CompassListener implements SensorEventListener {
 
     @Override
     public void onSensorChanged(SensorEvent event) {
-        if (event.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
-            gravity = event.values.clone();
+        switch (event.sensor.getType()) {
+            case Sensor.TYPE_ACCELEROMETER:
+                gravity = event.values.clone();
+                break;
+            case Sensor.TYPE_MAGNETIC_FIELD:
+                geomagnetic = event.values.clone();
+                break;
+            default:
+                return;
         }
-        if (event.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD) {
-            geomagnetic = event.values.clone();
-        }
+        notifyListener();
     }
 
-    protected float calculateRotation() {
+    protected float calculateRotation() throws Exception {
+        Log.d(TAG, "Calculating rotation");
         if (gravity == null || geomagnetic == null) {
-            throw new AssertionError();
+            throw new Exception();
         }
 
         float rotation[] = new float[9];
@@ -55,14 +62,16 @@ public class CompassListener implements SensorEventListener {
         boolean success = SensorManager.getRotationMatrix(rotation, inclination, gravity, geomagnetic);
 
         if (!success) {
-            throw new AssertionError();
+            throw new Exception();
         }
 
         float orientation[] = new float[3];
         SensorManager.getOrientation(rotation, orientation);
         float azimuthalRotation = orientation[0];
 
+        Log.d(TAG, String.format("rotation calculated to be %f", azimuthalRotation));
         return azimuthalRotation;
+
     }
 
     protected void notifyListener() {
