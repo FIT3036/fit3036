@@ -4,6 +4,7 @@ import android.content.Intent;
 import android.content.res.AssetManager;
 import android.location.Location;
 import android.os.Bundle;
+import android.os.Handler;
 import android.support.v4.app.FragmentActivity;
 import android.util.Log;
 import android.util.Pair;
@@ -38,6 +39,11 @@ import java.text.DateFormat;
 import java.util.Date;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Timer;
+import java.util.TimerTask;
+
+import static com.google.maps.android.SphericalUtil.computeOffset;
+import static java.lang.System.nanoTime;
 
 public class MapsActivity extends FragmentActivity implements
         LocationListener,
@@ -46,19 +52,29 @@ public class MapsActivity extends FragmentActivity implements
         GoogleApiClient.OnConnectionFailedListener {
 
     private static final String TAG = "LocationActivity";
-    private static final long INTERVAL = 1000 * 60 * 1; //1 minute
-    private static final long FASTEST_INTERVAL = 1000 * 60 * 1; // 1 minute
+    private static final long INTERVAL = 666; // devil's second
+    private static final long FASTEST_INTERVAL = 100; // 0.1 seconds (!)
     Button btnFusedLocation;
     TextView tvLocation;
     LocationRequest mLocationRequest;
     GoogleApiClient mGoogleApiClient;
     Location mCurrentLocation;
-    String mLastUpdateTime;
+    Date mLastUpdateTime;
+
+    Timer locationInterpolatorTimer;
+    TimerTask locationInterpolatorTimerTask;
+    static final int LOCATION_INTERPOLATE_INTERVAL = 20;
+
+    float lastSpeed;
+    float lastBearing;
+    long lastUpdateNanoTime;
 
     GoogleMap googleMap;
     Marker userMarker;
     AssetManager assetManager;
 
+    Handler mainThreadHandler;
+    Runnable mainThreadPoster;
 
     Navmesh navmesh;
     NavmeshViewer navmeshViewer;
@@ -109,6 +125,23 @@ public class MapsActivity extends FragmentActivity implements
         navmeshViewer = new NavmeshViewer(googleMap, navmesh);
         navmeshViewer.draw();
 
+        mainThreadHandler = new Handler(getMainLooper());
+
+        mainThreadPoster = new Runnable() {
+            @Override
+            public void run() {
+                onLocationInterpolated();
+            }
+        };
+
+
+
+        locationInterpolatorTimerTask =  new TimerTask() {
+            @Override
+            public void run() {
+                mainThreadHandler.post(mainThreadPoster);
+            }
+        };
         addMarker();
 
         stateMachine = new MapAppSM(this, navmesh, navmeshViewer);
@@ -218,21 +251,57 @@ public class MapsActivity extends FragmentActivity implements
 
     @Override
     public void onLocationChanged(Location location) {
+        Log.d(TAG, "got new location");
         mCurrentLocation = location;
-        mLastUpdateTime = DateFormat.getTimeInstance().format(new Date());
+        lastUpdateNanoTime = nanoTime();
 
-        LatLng currentLatLng = new LatLng(mCurrentLocation.getLatitude(), mCurrentLocation.getLongitude());
+        if ( location.hasBearing()) {
+            lastBearing = location.getBearing();
+        }
+
+        if (location.hasSpeed()) {
+            lastSpeed = location.getSpeed();
+        }
+
+        if (locationInterpolatorTimer == null){
+            locationInterpolatorTimer = new Timer();
+            locationInterpolatorTimer.schedule(locationInterpolatorTimerTask, 0, LOCATION_INTERPOLATE_INTERVAL);
+        }
+
+    }
+
+    public Location interpolateLocation() {
+        double secondsSinceLastUpdate = (nanoTime() - lastUpdateNanoTime) / 1.0E9;
+        Location interpolatedLocation = new Location(mCurrentLocation);
+
+        LatLng interpolatedPosition = computeOffset(new LatLng(mCurrentLocation.getLatitude(), mCurrentLocation.getLongitude()),
+                lastSpeed * secondsSinceLastUpdate,
+                lastBearing
+        );
+
+        interpolatedLocation.setLatitude(interpolatedLocation.getLatitude());
+        interpolatedLocation.setLongitude(interpolatedLocation.getLongitude());
+
+        return interpolatedLocation;
+    }
+
+    public void onLocationInterpolated() {
+        Location interpolatedLocation = interpolateLocation();
+
+
+        LatLng currentLatLng = new LatLng(interpolatedLocation.getLatitude(), interpolatedLocation.getLongitude());
         userMarker.setPosition(currentLatLng);
 
         //googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(currentLatLng, 13));
-        stateMachine.onLocationChanged(location);
+        stateMachine.onLocationChanged(interpolatedLocation);
         //addMarker();
+
     }
 
     @Override
     public void onRotationChanged(float rotation) {
 
-        Log.d(TAG, String.format("Got a location change! rotation is now %f", rotation));
+        //Log.d(TAG, String.format("Got a location change! rotation is now %f", rotation));
         float rotationDegrees = rotation / (float)Math.PI * 180;
         userMarker.setRotation(rotationDegrees);
 
@@ -282,6 +351,11 @@ public class MapsActivity extends FragmentActivity implements
             LocationServices.FusedLocationApi.removeLocationUpdates(
                     mGoogleApiClient, this);
             Log.d(TAG, "Location update stopped .......................");
+        }
+        if (this.locationInterpolatorTimer != null) {
+            this.locationInterpolatorTimerTask.cancel();
+            this.locationInterpolatorTimer.cancel();
+            this.locationInterpolatorTimer = null;
         }
     }
 

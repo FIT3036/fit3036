@@ -51,7 +51,7 @@ public class CompassListener implements SensorEventListener {
     }
 
     protected float calculateRotation() throws Exception {
-        Log.d(TAG, "Calculating rotation");
+        //Log.d(TAG, "Calculating rotation");
         if (gravity == null || geomagnetic == null) {
             throw new Exception();
         }
@@ -69,7 +69,7 @@ public class CompassListener implements SensorEventListener {
         SensorManager.getOrientation(rotation, orientation);
         float azimuthalRotation = orientation[0];
 
-        Log.d(TAG, String.format("rotation calculated to be %f", azimuthalRotation));
+        //Log.d(TAG, String.format("rotation calculated to be %f", azimuthalRotation));
         return azimuthalRotation;
 
     }
