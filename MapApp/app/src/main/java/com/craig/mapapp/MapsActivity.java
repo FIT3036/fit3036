@@ -3,6 +3,7 @@ package com.craig.mapapp;
 import android.content.Intent;
 import android.content.res.AssetManager;
 import android.location.Location;
+import android.media.MediaPlayer;
 import android.os.Bundle;
 import android.os.Handler;
 import android.support.v4.app.FragmentActivity;
@@ -62,7 +63,6 @@ public class MapsActivity extends FragmentActivity implements
     Date mLastUpdateTime;
 
     Timer locationInterpolatorTimer;
-    TimerTask locationInterpolatorTimerTask;
     static final int LOCATION_INTERPOLATE_INTERVAL = 20;
 
     float lastSpeed;
@@ -76,6 +76,15 @@ public class MapsActivity extends FragmentActivity implements
     Handler mainThreadHandler;
     Runnable mainThreadPoster;
 
+    Beeper beeper;
+
+    class LocationInterpolatorTimerTask extends TimerTask {
+        @Override
+        public void run() {
+            mainThreadHandler.post(mainThreadPoster);
+        }
+    }
+
     Navmesh navmesh;
     NavmeshViewer navmeshViewer;
     MapAppSM stateMachine;
@@ -87,6 +96,7 @@ public class MapsActivity extends FragmentActivity implements
         mLocationRequest.setFastestInterval(FASTEST_INTERVAL);
         mLocationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
     }
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -134,17 +144,12 @@ public class MapsActivity extends FragmentActivity implements
             }
         };
 
+        beeper = new Beeper(this);
 
 
-        locationInterpolatorTimerTask =  new TimerTask() {
-            @Override
-            public void run() {
-                mainThreadHandler.post(mainThreadPoster);
-            }
-        };
         addMarker();
 
-        stateMachine = new MapAppSM(this, navmesh, navmeshViewer);
+        stateMachine = new MapAppSM(this, navmesh, navmeshViewer, beeper);
 
         String testSearch = "food";
         Queue<Pair<Double, Navmesh.Cell>> results = navmesh.getCellsMatchingString(testSearch);
@@ -265,7 +270,7 @@ public class MapsActivity extends FragmentActivity implements
 
         if (locationInterpolatorTimer == null){
             locationInterpolatorTimer = new Timer();
-            locationInterpolatorTimer.schedule(locationInterpolatorTimerTask, 0, LOCATION_INTERPOLATE_INTERVAL);
+            locationInterpolatorTimer.schedule(new LocationInterpolatorTimerTask(), 0, LOCATION_INTERPOLATE_INTERVAL);
         }
 
     }
@@ -353,8 +358,8 @@ public class MapsActivity extends FragmentActivity implements
             Log.d(TAG, "Location update stopped .......................");
         }
         if (this.locationInterpolatorTimer != null) {
-            this.locationInterpolatorTimerTask.cancel();
             this.locationInterpolatorTimer.cancel();
+            this.locationInterpolatorTimer.purge();
             this.locationInterpolatorTimer = null;
         }
     }

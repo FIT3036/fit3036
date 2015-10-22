@@ -31,11 +31,13 @@ public class MapAppSM extends AbstractVoiceSM {
     private Navmesh navmesh;
     private RouteDirector routeDirector;
     private NavmeshViewer navmeshViewer;
+    private Beeper beeper;
 
-    public MapAppSM(Activity context, Navmesh navmesh, NavmeshViewer navmeshViewer) {
+    public MapAppSM(Activity context, Navmesh navmesh, NavmeshViewer navmeshViewer, Beeper beeper) {
         super(context);
         this.navmesh = navmesh;
         this.navmeshViewer = navmeshViewer;
+        this.beeper = beeper;
     }
 
     public static LatLng getLatLng(Location location) {
@@ -214,6 +216,11 @@ public class MapAppSM extends AbstractVoiceSM {
             double rotationDiff = direction - lastKnownRotation;
             rotationDiff = normalizeAngle(rotationDiff);
 
+            double metres = com.google.maps.android.SphericalUtil.computeDistanceBetween(getLatLng(currentPoint), getLatLng(nextPoint));
+
+            beeper.setAngle((float) rotationDiff);
+            beeper.setDistance((float) metres);
+
             double clockHour = (rotationDiff + Math.PI) / 2*Math.PI * 12;
             int clockNumber = (int) Math.round(clockHour);
 
@@ -221,7 +228,6 @@ public class MapAppSM extends AbstractVoiceSM {
                 clockNumber = 12;
             }
 
-            double metres = com.google.maps.android.SphericalUtil.computeDistanceBetween(getLatLng(currentPoint), getLatLng(nextPoint));
             int metresNum = (int) Math.round(metres / 5) * 5;
 
             return String.format("Turn towards %i o'clock, and walk for about %i metres.", clockNumber, metresNum);
@@ -232,6 +238,7 @@ public class MapAppSM extends AbstractVoiceSM {
             this.directionsList = directionsList;
             this.locationListener = new RouteLocationListener();
             navmeshViewer.drawPath(directionsList);
+            beeper.startBeeping();
         }
 
 
