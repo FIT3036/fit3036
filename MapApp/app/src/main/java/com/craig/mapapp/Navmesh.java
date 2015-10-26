@@ -79,11 +79,15 @@ public class Navmesh extends java.util.Observable {
 		}
 
 		public double lengthSq() {
-			return distanceSq(0, 0);
+			return this.dot(this);
 		}
 
 		public double distanceSq(double x, double y) {
 			return (Math.pow(this.x - x, 2) + Math.pow(this.y - y, 2));
+		}
+
+		public double distanceSq(Point otherPoint) {
+			return otherPoint.subtract(this).lengthSq();
 		}
 
 		public Point add(Point otherPoint) {
@@ -93,6 +97,10 @@ public class Navmesh extends java.util.Observable {
 		public Point divide(Double constant) {
 			return new Point(this.x / constant, this.y / constant);
 		}
+
+		public Point multiply(Double constant) { return new Point(this.x * constant, this.y * constant); }
+
+		public double dot(Point otherPoint) { return this.x*otherPoint.x + this.y*otherPoint.y; }
 	}
 
 	private class AStarCell implements Comparable<AStarCell> {
@@ -475,10 +483,101 @@ public class Navmesh extends java.util.Observable {
 	    	return this.points.length;
 	    }
 	}
+
+	public class Landmark {
+		public Point position;
+		public String text;
+
+		private Landmark(String text, Point position) {
+			this.text = text;
+			this.position = position;
+		}
+
+		private Landmark(String text, double x, double y) {
+			this(text, new Point(x,y));
+		}
+	}
+
+	public void addLandmark(String text, double x, double y) {
+		this.landmarks.add(new Landmark(text, x, y));
+	}
+
+	public Set<Landmark> getLandmarks() {
+		return this.landmarks;
+	}
+
+
+	// returns the closest landmark to the end of a line from a to b.
+	public Pair<Landmark, Point> getClosestLandmarkTo(Point pointA, Point pointB, double cutoff) {
+		Point diff = pointB.subtract(pointA);
+
+		Landmark closestLandmarkToB = null;
+		Point diffForClosestLandmark = null;
+		double closestDistance = Double.MAX_VALUE;
+
+		for (Landmark landmark: this.landmarks) {
+			Point pointL = landmark.position;
+			Point lDiff = pointA.subtract(pointL);
+
+			// if p is a point, and we want the distance to the line A + tN, then we need to compute
+			// |(a-p) - ((a-p).n)n|. this line does that. I wish Java had operator overloading :(
+			// note that until later we only need squared distances, as we only need to find which is smallest, not its exact value.
+			Point pToLine = lDiff.subtract(diff.multiply(lDiff.dot(diff)));
+			double distanceToInfLineSq = pToLine.lengthSq();
+
+			double distanceToB = pointB.distanceSq(pointL);
+			double distanceToA = pointB.distanceSq(pointL);
+
+			// we have just computed the distance from p to an infinite line, now we need to account
+			// that our actual line is just the segment from a to b
+			double distanceToLineSq;
+			Point diffToLine;
+			if ((distanceToInfLineSq < distanceToA) && (distanceToInfLineSq < distanceToB)) {
+				// the closest point must be between a and b
+				distanceToLineSq = distanceToInfLineSq;
+				diffToLine = pToLine;
+			} else {
+				distanceToLineSq = Math.min(distanceToA, distanceToB);
+				diffToLine = pointB.subtract(pointL);
+			}
+			double distanceToLine = Math.sqrt(distanceToLineSq);
+
+			if (distanceToLine > cutoff) {
+				continue;
+			}
+
+			if (distanceToB < closestDistance) {
+				closestDistance = distanceToB;
+				diffForClosestLandmark = diffToLine;
+				closestLandmarkToB = landmark;
+			}
+
+		}
+
+		return new Pair<Landmark, Point>(closestLandmarkToB, diffForClosestLandmark);
+
+	}
 	
 	private HashSet<Point> nodes;
 	private HashSet<Edge> edges;
 	private HashSet<Cell> cells;
+	private HashSet<Landmark> landmarks;
+
+	//obtained using the Google Maps scale bar and Octave/Matlab. This is the distance in our weird
+	// nearly-lat-long-but-actually-linear coordinate system that corresponds to 1 metre.
+	public static double latLongNorm1M = 1.38522561344905e-05;
+
+	//should be no need to ever use this, there is a gmaps api to get the distance in metres between
+	//two latitudes and longitudes.
+	public static double latLong2M(double latLongNorm) {
+		return latLongNorm / latLongNorm1M;
+	}
+
+	//this one is useful, however.
+	public static double metres2LatLong(double metres) {
+		return metres * latLongNorm1M;
+	}
+
 	private Multimap<String, Cell> placeDictionary;
 
 	private StringEncoder phoneticEncoder;
@@ -572,6 +671,7 @@ public class Navmesh extends java.util.Observable {
 		this.nodes = new HashSet<Point>();
 		this.edges = new HashSet<Edge>();
 		this.cells = new HashSet<Cell>();
+		this.landmarks = new HashSet<Landmark>();
 		this.placeDictionary = HashMultimap.create(20,5);
 		this.phoneticEncoder = new Caverphone2();
 		notifyObservers();
@@ -629,6 +729,20 @@ public class Navmesh extends java.util.Observable {
 		}
 		reader.close();
 		return n;
+	}
+
+	public void loadLandmarksFromFile(InputStream inputStream) throws IOException {
+		BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
+
+		String line;
+		while ((line = reader.readLine()) != null) {
+			String[] landmarkData = line.split("~");
+			String[] coordData = landmarkData[0].split(",");
+			double x = Double.parseDouble(coordData[0]);
+			double y = Double.parseDouble(coordData[1]);
+			this.addLandmark(landmarkData[1], x, y);
+		}
+
 	}
 	
 	public Bounds getBoundingBox() {

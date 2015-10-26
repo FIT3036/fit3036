@@ -123,6 +123,7 @@ public class MapsActivity extends FragmentActivity implements
 
         try {
             navmesh = Navmesh.fromFile(assetManager.open("campusCentreMap.txt"));
+            navmesh.loadLandmarksFromFile(assetManager.open("campusCentreLandmarks.txt"));
             Log.d(TAG, "got campus centre map!");
         } catch (IOException e) {
             Log.d(TAG, "couldn't open campus centre map :(");

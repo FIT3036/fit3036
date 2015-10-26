@@ -10,6 +10,7 @@ import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.PolygonOptions;
 import com.google.android.gms.maps.model.PolylineOptions;
 
+import com.google.android.gms.maps.model.MarkerOptions;
 import java.util.Queue;
 
 /**
@@ -34,6 +35,11 @@ public class NavmeshViewer {
             }
             this.map.addPolygon(cellOptions);
             Log.d(TAG, "added a cell!");
+        }
+        for (Navmesh.Landmark landmark : this.navmesh.getLandmarks() ) {
+            MarkerOptions options = new MarkerOptions();
+            options.position(new LatLng(landmark.position.x, landmark.position.y));
+            this.map.addMarker(options);
         }
 
     }
