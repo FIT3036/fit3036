@@ -22,6 +22,8 @@ import java.util.NoSuchElementException;
 import java.util.PriorityQueue;
 import java.util.Queue;
 
+import static com.google.maps.android.SphericalUtil.computeDistanceBetween;
+
 
 /**
  * Created by jarrad on 14/10/15.
@@ -190,7 +192,7 @@ public class MapAppSM extends AbstractVoiceSM {
             public void onLocationChanged(Location location) {
                 for (Navmesh.Point point :directionsList) {
                     //get distance in metres;
-                    double distance = SphericalUtil.computeDistanceBetween(getLatLng(location), getLatLng(point));
+                    double distance = computeDistanceBetween(getLatLng(location), getLatLng(point));
                     if (distance < 0.4) {
                         while (directionsList.peek() != point)
                             { directionsList.poll(); }
@@ -205,18 +207,37 @@ public class MapAppSM extends AbstractVoiceSM {
             directionsList.poll();
         }
 
+
         public String generateDirections() {
             Iterator<Navmesh.Point> pointI = directionsList.iterator();
             Navmesh.Point currentPoint = pointI.next();
             Navmesh.Point nextPoint = pointI.next();
 
+            double cutoffMetres = 5; // we are interested in landmarks in a five metre radius of our path.
+
+            double cutoffLatLong = navmesh.metres2LatLong(cutoffMetres);
+
+            Pair<Navmesh.Landmark, Navmesh.Point> result = navmesh.getClosestLandmarkTo(currentPoint, nextPoint, cutoffLatLong);
+            Navmesh.Landmark landmark = result.first;
+            Navmesh.Point landmarkToLine = result.second;
+
+            //sentences as member names because it's better than comments!
+            double distanceToWalkAfterPassingLandmark = 0;
+
+            if (landmark != null) {
+                Navmesh.Point closestPointOnLine = landmark.position.add(landmarkToLine);
+                distanceToWalkAfterPassingLandmark = computeDistanceBetween(getLatLng(closestPointOnLine), getLatLng(nextPoint));
+            }
+
+
             Navmesh.Point diff = nextPoint.subtract(currentPoint);
+
             double direction = Math.atan2(diff.y, diff.x);
 
             double rotationDiff = direction - lastKnownRotation;
             rotationDiff = normalizeAngle(rotationDiff);
 
-            double metres = com.google.maps.android.SphericalUtil.computeDistanceBetween(getLatLng(currentPoint), getLatLng(nextPoint));
+            double metres = computeDistanceBetween(getLatLng(currentPoint), getLatLng(nextPoint));
 
             beeper.setAngle((float) rotationDiff);
             beeper.setDistance((float) metres);
@@ -230,7 +251,14 @@ public class MapAppSM extends AbstractVoiceSM {
 
             int metresNum = (int) Math.round(metres / 5) * 5;
 
-            return String.format("Turn towards %i o'clock, and walk for about %i metres.", clockNumber, metresNum);
+            if (landmark == null) {
+                return String.format("Turn towards %i o'clock, and walk for about %i metres.", clockNumber, metresNum);
+            } else if (distanceToWalkAfterPassingLandmark < cutoffMetres) {
+                return String.format("Turn towards %i o'clock, and walk for about %i metres until %s.", clockNumber, metresNum, landmark.text);
+            } else {
+                int metresRemaining = (int) Math.round(distanceToWalkAfterPassingLandmark);
+                return String.format("Turn towards %i o'clock, walk for about %i metres until %s, then walk for another %i metres.", clockNumber, metresNum, landmark.text, metresRemaining);
+            }
 
         }
 

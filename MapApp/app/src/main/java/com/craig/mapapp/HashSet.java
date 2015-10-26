@@ -1,5 +1,7 @@
 package com.craig.mapapp;
 
+import android.support.annotation.NonNull;
+
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -92,6 +94,7 @@ public class HashSet<T> implements Iterable<T>, java.util.Set<T> {
 	public int size() {
 		return map.size();
 	}
+
 
 	@SuppressWarnings("unchecked")
 	public Object[] toArray() {
