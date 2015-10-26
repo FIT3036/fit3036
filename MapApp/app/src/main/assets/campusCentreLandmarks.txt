@@ -1,0 +1,12 @@
+-37.91189711921311,145.1331649126301~you can hear a café
+-37.911919970650025,145.13297966834588~you go past some dance music
+-37.91190109742626,145.13290739064774~you can smell an asian supermarket
+-37.91181969478212,145.13282635064039~you can hear a take-away café
+-37.91166128855219,145.13288420641828~you can hear a juice bar (if it's before 3pm)
+-37.91173564624185,145.1326582437906~you can smell the clean smell of a pharmacy
+-37.91194329818417,145.13269924356038~you can smell pizza
+-37.911943543166146,145.13276248997013~you can hear a hipsters debating philosophy and staff members complaining about hipsters
+-37.91205062421152,145.132773414884~you can smell fish and chips
+-37.91212829053172,145.1327018232403~you can smell asian takeaway
+-37.9117848217869,145.13322960227302~you can hear students socializing
+-37.911780580868744,145.13330137336155~you can hear hairdressers gossipping

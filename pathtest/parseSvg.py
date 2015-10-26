@@ -54,7 +54,7 @@ class Vector:
         return Vector(result.tolist()[0])
 
 
-
+from collections import namedtuple
 
 fileName = 'campusCentreTrace.svg'
 
@@ -142,9 +142,43 @@ def getPaths(transform=None):
 
 def outputPaths(paths):
     nodeString = '\n'.join(
-    				(';'.join((node.strNoBrackets() for node in path[0]))
-				   +('~'+path[1] if path[1] else '')
+                    (';'.join((node.strNoBrackets() for node in path[0]))
+                   +('~'+path[1] if path[1] else '')
                  for path in paths))
     return nodeString
+
+
+Landmark = namedtuple('Landmark', 'position landmark')
+
+def getLandmarks(transform=None):
+    landmarksLayer = root.find("svg:g[@inkscape:label='Landmarks']", inkscapeNamespace)
+    rawLandmarks = landmarksLayer.findall("*[@x-landmark]", inkscapeNamespace)
+
+    landmarks = []
+
+    for landmark in rawLandmarks:
+        position = Vector(*(float(landmark.get(z)) for z in ['cx','cy']))
+        if transform is not None:
+            position = position*transform
+        landmarks.append(Landmark(position, landmark.get('x-landmark')))
+
+    return landmarks
+
+def outputLandmarks(landmarks):
+    landmarksString = '\n'.join(
+        (landmark.position.strNoBrackets()+'~'+landmark.landmark
+         for landmark in landmarks)
+    )
+    return landmarksString
+
+transform = calculateTransform()
+
+nodesFile = open('campusCentreTrace.txt', 'w')
+nodesFile.write(outputPaths(getPaths(transform)))
+nodesFile.close()
+
+landmarksFile = open('campusCentreLandmarks.txt', 'w')
+landmarksFile.write(outputLandmarks(getLandmarks(transform)))
+landmarksFile.close()
 
 print(outputPaths(getPaths(calculateTransform())))
