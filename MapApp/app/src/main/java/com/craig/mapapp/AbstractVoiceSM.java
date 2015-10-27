@@ -89,7 +89,7 @@ abstract public class AbstractVoiceSM {
         configureStateMachine(smc);
 
         sm = new StateMachine<States, Triggers>(BaseStates.Preinit, smc);
-        /* // silence exceptions on unhandled states
+         // silence exceptions on unhandled states
         sm.onUnhandledTrigger(new Action2<States, Triggers>() {
             @Override
             public void doIt(States s, Triggers t) {
@@ -97,7 +97,7 @@ abstract public class AbstractVoiceSM {
                 return;
             }
         });
-        */
+
     }
 
     abstract void configureStateMachine(StateMachineConfig<States, Triggers> smc);
@@ -114,7 +114,7 @@ abstract public class AbstractVoiceSM {
     }
 
     protected enum BaseTriggers implements Triggers {
-        TTSReady, DoubleTap
+        TTSReady, DoubleTap, SingleTap
     }
 
     //stateless requires triggers that take a parameter to go through some nasty boilerplate setup,
@@ -321,6 +321,8 @@ abstract public class AbstractVoiceSM {
             }
             this.waitingForYesNo = null;
             return true;
+        } else {
+            this.sm.fire(BaseTriggers.SingleTap);
         }
         return false;
     }

@@ -59,7 +59,7 @@ public class Navmesh extends java.util.Observable {
 	public static final double NODE_SNAP_DIST = 0.00000000001; // we are in latitude and longitude!
 	
 	
-	public class Point extends com.google.maps.android.geometry.Point {
+	public static class Point extends com.google.maps.android.geometry.Point {
 		private static final long serialVersionUID = 1L;
 		
 		public Point(double x, double y) {
@@ -526,7 +526,7 @@ public class Navmesh extends java.util.Observable {
 			double distanceToInfLineSq = pToLine.lengthSq();
 
 			double distanceToB = pointB.distanceSq(pointL);
-			double distanceToA = pointB.distanceSq(pointL);
+			double distanceToA = pointA.distanceSq(pointL);
 
 			// we have just computed the distance from p to an infinite line, now we need to account
 			// that our actual line is just the segment from a to b

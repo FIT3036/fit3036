@@ -1,11 +1,15 @@
 package com.craig.mapapp;
 
 import android.app.Activity;
+import android.content.res.AssetFileDescriptor;
+import android.content.res.AssetManager;
 import android.media.AudioAttributes;
 import android.media.MediaPlayer;
 import android.os.Handler;
+import android.util.Log;
 import android.util.Pair;
 
+import java.io.IOException;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -21,8 +25,8 @@ public class Beeper {
     private float angle = 0;
     private float distance = 1;
 
-    private static final long BASE_DELAY_MS = 500;
-    private static final long DELAY_PER_M_MS = 100;
+    private static final long BASE_DELAY_MS = 2000;
+    private static final long DELAY_PER_M_MS = 500;
 
     private static boolean beeping = false;
 
@@ -33,7 +37,9 @@ public class Beeper {
             float distanceVolume = volume / (distance+1);
             Pair<Float, Float> volumes = calculateVolume(distanceVolume, angle);
             Beeper.this.mediaPlayer.setVolume(volumes.first, volumes.second);
-            Beeper.this.timer.cancel();
+            if (Beeper.this.timer != null) {
+                Beeper.this.timer.cancel();
+            }
             if (Beeper.this.beeping) {
                 Beeper.this.mediaPlayer.start();
                 Beeper.this.timer = new Timer();
@@ -47,12 +53,15 @@ public class Beeper {
     // angle is in radians!
     public Pair<Float, Float> calculateVolume(float baseVolume, float angle) {
         float volumeLeft = invsqrt2 * (float)(Math.cos(angle)+Math.sin(angle));
-        float volumeRight = invsqrt2 * (float)(Math.cos(angle)-Math.sin(angle));
+        float volumeRight =  invsqrt2 * (float)(Math.cos(angle)-Math.sin(angle));
+        volumeLeft = (volumeLeft + 1.0f) / 2.0f;
+        volumeRight = (volumeRight + 1.0f) / 2.0f;
+        Log.d("ASDF", String.format("Set volume to %.2f, %.2f", volumeLeft, volumeRight));
         return new Pair<Float, Float>(volumeLeft, volumeRight);
     }
 
     private long calculateBeepDelay() {
-        return (long) (DELAY_PER_M_MS * this.distance + BASE_DELAY_MS);
+        return (long) (DELAY_PER_M_MS * Math.log(this.distance + 1) + BASE_DELAY_MS);
     }
 
     public Beeper(Activity activity) {
@@ -63,7 +72,15 @@ public class Beeper {
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .build();
         this.mediaPlayer.setAudioAttributes(attributes);
-        //TODO: this.mediaPlayer.setDataSource();
+        TODO:
+        try {
+            AssetFileDescriptor beep = activity.getAssets().openFd("Sonar_pings.ogg");
+            this.mediaPlayer.setDataSource(beep.getFileDescriptor(), beep.getStartOffset(), beep.getLength());
+            beep.close();
+            this.mediaPlayer.prepare();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     public void setAngle(float newAngle) {

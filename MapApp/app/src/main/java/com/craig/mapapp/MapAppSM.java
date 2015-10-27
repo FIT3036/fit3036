@@ -51,7 +51,7 @@ public class MapAppSM extends AbstractVoiceSM {
     }
 
     public Navmesh.Point getPoint(Location location) {
-        return navmesh.new Point(location.getLatitude(), location.getLongitude());
+        return new Navmesh.Point(location.getLatitude(), location.getLongitude());
     }
     public static double normalizeAngle(double angle) {
         while (angle <= Math.PI) angle += 2*Math.PI;
@@ -103,7 +103,7 @@ public class MapAppSM extends AbstractVoiceSM {
                         Queue<Pair<Double, Navmesh.Cell>> queueOfResults = (Queue<Pair<Double, Navmesh.Cell>>) queueOfResultsUncast;
 
                         //use navmesh.get
-                        return "Do you want " + queueOfResults.peek().second.getName()+"?";
+                        return "Do you want " + queueOfResults.peek().second.getName() + "?";
                     }
 
                     @Override
@@ -139,12 +139,12 @@ public class MapAppSM extends AbstractVoiceSM {
                             Navmesh.Cell testCell = navmesh.getCellContaining(testPoint);
                             startPoint = testPoint;
                         } catch (NoSuchElementException e) {
-                            startPoint = navmesh.new Point(-37.912198, 145.133097);
+                            startPoint = new Navmesh.Point(-37.912198, 145.133097);
                         }
                         Log.d(TAG, targetCell.getName());
                         Log.d(TAG, String.format("Centre: Lat: %f, Long: %f", targetCell.centre.x, targetCell.centre.y));
                         Navmesh.Point[] points = targetCell.getPoints();
-                        Log.d(TAG, String.format("Cell points: %f,%f; %f,%f; %f,%f; %f,%f", points[0].x,points[0].y,points[1].x,points[1].y,points[2].x,points[2].y,points[3].x,points[3].y));
+                        Log.d(TAG, String.format("Cell points: %f,%f; %f,%f; %f,%f; %f,%f", points[0].x, points[0].y, points[1].x, points[1].y, points[2].x, points[2].y, points[3].x, points[3].y));
 
                         Deque<Navmesh.Point> directionsList = navmesh.aStarPoints(startPoint, targetCell.centre);
                         sm.fire(StartDirections, directionsList);
@@ -163,23 +163,42 @@ public class MapAppSM extends AbstractVoiceSM {
                     }
 
                 }, Deque.class)
-                .permit(Trigger.GiveDirectionTo, State.GivingNextDirection);
+                .permit(Trigger.ReachedPoint, State.GivingNextDirection)
+                .permit(BaseTriggers.DoubleTap, State.GivingNextDirection);
+
+
 
         smc.configure(State.GivingNextDirection)
                 .substateOf(State.GivingDirections)
-                .onEntryFrom(Trigger.GiveDirectionTo, new SpeakThenAction("reachedPoint") {
+                .onEntry( new SpeakThenAction("reachedPoint") {
 
-                    @Override public String generatePrompt() {
+                    @Override
+                    public String generatePrompt() {
                         return routeDirector.generateDirections();
                     }
 
                     @Override
                     public void finishedSpeech() {
-                        routeDirector.markPointReached();
-                        sm.fire(Trigger.DirectionGiven);
+                        if (routeDirector.markPointReached()) {
+                            sm.fire(Trigger.DirectionGiven);
+                        } else {
+                            sm.fire(Trigger.ReachedEnd);
+                        }
                     }
                 })
-                .permit(Trigger.DirectionGiven, State.GivingDirections);
+                .permit(Trigger.DirectionGiven, State.GivingDirections)
+                .permit(Trigger.ReachedEnd, State.ReachedEnd);
+
+        smc.configure(State.ReachedEnd)
+                .onEntry( new Action() {
+
+                    @Override
+                    public void doIt() {
+                        //we are done! may as well just stay here, they don't want to do anything else..
+                        //we have already congratulated them on reaching the end so we don't even need to do that.
+                    }
+                })
+                .permit(BaseTriggers.DoubleTap, State.AskDestination);
 
     }
 
@@ -190,28 +209,55 @@ public class MapAppSM extends AbstractVoiceSM {
         private class RouteLocationListener implements com.google.android.gms.location.LocationListener {
             @Override
             public void onLocationChanged(Location location) {
+
+                double metres = computeDistanceBetween(getLatLng(location), getLatLng(directionsList.peek()));
+                Navmesh.Point diff = directionsList.peek().subtract(new Navmesh.Point(location.getLatitude(), location.getLongitude()));
+                double direction = Math.atan2(diff.y, diff.x);
+                double directionDiff = lastKnownRotation - direction;
+
+                beeper.setAngle((float) directionDiff);
+                beeper.setDistance((float) metres);
+
                 for (Navmesh.Point point :directionsList) {
                     //get distance in metres;
                     double distance = computeDistanceBetween(getLatLng(location), getLatLng(point));
-                    if (distance < 0.4) {
-                        while (directionsList.peek() != point)
-                            { directionsList.poll(); }
-                        //now the reached point is at the top of the queue
-                        Log.d(TAG, "you reached a point!");
+                    if (distance < 1) {
+                        reachedPoint(point);
                     }
                 }
             }
+
         }
 
-        public void markPointReached() {
-            directionsList.poll();
+
+        private void reachedPoint(Navmesh.Point point) {
+            while (directionsList.peek() != point)
+            { directionsList.poll(); }
+            //now the reached point is at the top of the queue
+            Log.d(TAG, "you reached a point!");
+            sm.fire(Trigger.ReachedPoint);
+        }
+
+        public boolean markPointReached() {
+            try {
+                directionsList.poll();
+                return true;
+            } catch (NoSuchElementException e) {
+                return false;
+            }
         }
 
 
         public String generateDirections() {
             Iterator<Navmesh.Point> pointI = directionsList.iterator();
-            Navmesh.Point currentPoint = pointI.next();
-            Navmesh.Point nextPoint = pointI.next();
+            Navmesh.Point currentPoint;
+            Navmesh.Point nextPoint;
+            try {
+                currentPoint = pointI.next();
+                nextPoint = pointI.next();
+            } catch (NoSuchElementException e) {
+                return "Looks like you reached the end! Well done!";
+            }
 
             double cutoffMetres = 5; // we are interested in landmarks in a five metre radius of our path.
 
@@ -233,16 +279,16 @@ public class MapAppSM extends AbstractVoiceSM {
             Navmesh.Point diff = nextPoint.subtract(currentPoint);
 
             double direction = Math.atan2(diff.y, diff.x);
+            Log.d(TAG, String.format("direction is %f, or %f deg", direction, direction/Math.PI*180));
 
             double rotationDiff = direction - lastKnownRotation;
             rotationDiff = normalizeAngle(rotationDiff);
+            Log.d(TAG, String.format("normalized angle is %f, or %f deg", rotationDiff, rotationDiff/Math.PI*180));
 
             double metres = computeDistanceBetween(getLatLng(currentPoint), getLatLng(nextPoint));
 
-            beeper.setAngle((float) rotationDiff);
-            beeper.setDistance((float) metres);
 
-            double clockHour = (rotationDiff + Math.PI) / 2*Math.PI * 12;
+            double clockHour = (rotationDiff + Math.PI) / (2*Math.PI) * 12;
             int clockNumber = (int) Math.round(clockHour);
 
             if (clockNumber == 0) {
@@ -252,12 +298,12 @@ public class MapAppSM extends AbstractVoiceSM {
             int metresNum = (int) Math.round(metres / 5) * 5;
 
             if (landmark == null) {
-                return String.format("Turn towards %i o'clock, and walk for about %i metres.", clockNumber, metresNum);
+                return String.format("Turn towards %d o'clock, and walk for about %d metres.", clockNumber, metresNum);
             } else if (distanceToWalkAfterPassingLandmark < cutoffMetres) {
-                return String.format("Turn towards %i o'clock, and walk for about %i metres until %s.", clockNumber, metresNum, landmark.text);
+                return String.format("Turn towards %d o'clock, and walk for about %d metres until %s.", clockNumber, metresNum, landmark.text);
             } else {
                 int metresRemaining = (int) Math.round(distanceToWalkAfterPassingLandmark);
-                return String.format("Turn towards %i o'clock, walk for about %i metres until %s, then walk for another %i metres.", clockNumber, metresNum, landmark.text, metresRemaining);
+                return String.format("Turn towards %d o'clock, walk for about %d metres until %s, then walk for another %d metres.", clockNumber, metresNum, landmark.text, metresRemaining);
             }
 
         }
@@ -274,11 +320,11 @@ public class MapAppSM extends AbstractVoiceSM {
 
 
     protected enum State implements States {
-        AskDestination, SearchDestinations, ConfirmDestination, ConfirmedDestination, GivingDirections, GivingNextDirection
+        AskDestination, SearchDestinations, ConfirmDestination, ConfirmedDestination, GivingDirections, GivingNextDirection, ReachedEnd
     }
 
     protected enum Trigger implements Triggers {
-        GotPossibleDestinationsAbstract, GotDestinationAbstract, StartDirectionsAbstract, GiveDirectionTo, DirectionGiven
+        GotPossibleDestinationsAbstract, GotDestinationAbstract, StartDirectionsAbstract, ReachedPoint, DirectionGiven, ReachedEnd
     }
 
     private TriggerWithParameters1<Queue, States, Triggers> GotPossibleDestinations;
